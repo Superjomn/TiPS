@@ -1,5 +1,15 @@
 #pragma once
 
+#include <errno.h>
+#include <glog/logging.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <sys/types.h>
+
+#include <string>
+#include <type_traits>
+
 namespace swifts {
 
 // Call func(args...). If interrupted by signal, recall the function.
@@ -16,5 +26,8 @@ auto ignore_signal_call(FUNC&& func, ARGS&&... args) -> typename std::result_of<
     return err;
   }
 }
+std::string GetLocalIp();
+
+std::string StringFormat(const std::string& fmt_str, ...);
 
 }  // namespace swifts

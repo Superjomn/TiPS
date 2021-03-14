@@ -2,7 +2,7 @@
 #include <functional>
 #include <vector>
 
-#include "swiftsnails/core/common/managed_thread.h"
+#include "swiftps/core/common/managed_thread.h"
 
 namespace swifts {
 

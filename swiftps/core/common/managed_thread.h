@@ -4,7 +4,7 @@
 #include <mutex>
 #include <thread>
 
-#include "swiftsnails/core/common/semaphore.h"
+#include "swiftps/core/common/semaphore.h"
 
 namespace swifts {
 

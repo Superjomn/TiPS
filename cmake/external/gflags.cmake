@@ -69,7 +69,7 @@ IF(WIN32)
             )
   ENDIF()
 ENDIF(WIN32)
-ADD_LIBRARY(gflags STATIC IMPORTED GLOBAL ../../swiftsnails/core/mpi/mpi_context.cc ../../swiftsnails/core/mpi/mpi_context.h ../../swiftsnails/core/ps/server.cc ../../swiftsnails/core/ps/server.h ../../swiftsnails/core/ps/client.cc ../../swiftsnails/core/ps/client.h ../../swiftsnails/core/ps/sparse_table.cc ../../swiftsnails/core/ps/sparse_table.h ../../swiftsnails/core/ps/dense_table.cc ../../swiftsnails/core/ps/dense_table.h ../../swiftsnails/core/common/thread_pool.cc ../../swiftsnails/core/common/thread_pool.h ../../swiftsnails/core/common/managed_thread.cc ../../swiftsnails/core/common/managed_thread.h ../../swiftsnails/core/common/semaphore.cc ../../swiftsnails/core/common/semaphore.h)
+ADD_LIBRARY(gflags STATIC IMPORTED GLOBAL ../../swiftps/core/mpi/mpi_context.cc ../../swiftps/core/mpi/mpi_context.h ../../swiftps/core/ps/server.cc ../../swiftps/core/ps/server.h ../../swiftps/core/ps/client.cc ../../swiftps/core/ps/client.h ../../swiftps/core/ps/sparse_table.cc ../../swiftps/core/ps/sparse_table.h ../../swiftps/core/ps/dense_table.cc ../../swiftps/core/ps/dense_table.h ../../swiftps/core/common/thread_pool.cc ../../swiftps/core/common/thread_pool.h ../../swiftps/core/common/managed_thread.cc ../../swiftps/core/common/managed_thread.h ../../swiftps/core/common/semaphore.cc ../../swiftps/core/common/semaphore.h ../../swiftps/core/mpi/mpi.cc ../../swiftps/core/mpi/mpi.h ../../swiftps/core/common/rpc.cc ../../swiftps/core/common/rpc.h ../../swiftps/core/common/common.cc)
 SET_PROPERTY(TARGET gflags PROPERTY IMPORTED_LOCATION ${GFLAGS_LIBRARIES})
 ADD_DEPENDENCIES(gflags extern_gflags)
 

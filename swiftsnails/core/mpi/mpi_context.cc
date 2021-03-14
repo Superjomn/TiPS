@@ -1,1 +1,0 @@
-#include "swiftsnails/core/mpi/mpi_context.h"
