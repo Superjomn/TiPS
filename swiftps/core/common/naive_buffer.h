@@ -26,6 +26,10 @@
  * interfaces for serialization and de-serialization for a PaddlePaddle model to
  * avoid using the third-party libraries such as protobuf, and make the lite
  * dependencies small and easy to compile and deploy.
+ *
+ * NOTE For performance issue, NaiveBuffer is only used when simple serialization is needed. It is more easier for
+ * simple data structure for that it doesn't need a table definition.
+ * But for core data structure, it is necessary to use FlatBuffers.
  */
 
 namespace swifts {
@@ -89,7 +93,7 @@ struct NaiveBuffer {
   NaiveBuffer() = default;
 
   /// Read mode.
-  NaiveBuffer(const char* buffer, size_t buffer_size) { LoadFromMemory(buffer, buffer_size); }
+  NaiveBuffer(void* buffer, size_t buffer_size) { LoadFromMemory(buffer, buffer_size); }
 
   /// Require free memory of `size` bytes.
   void Require(size_t size);
@@ -99,7 +103,8 @@ struct NaiveBuffer {
 
   /// The current position of cursor for save or load.
   byte_t* cursor() { return &bytes_[cursor_]; }
-  const char * data() const { return reinterpret_cast<const char*>(bytes_.data()); }
+  const char* data() const { return reinterpret_cast<const char*>(bytes_.data()); }
+  void* data() { return &bytes_[0]; }
   size_t size() const { return bytes_.size(); }
   size_t free_size() const { return bytes_.size() - cursor_; }
 
@@ -107,9 +112,8 @@ struct NaiveBuffer {
   void SaveToFile(const std::string& filename) const;
   void AppendToFile(const std::string& filename) const;
 
-  //  void LoadFromFile(const std::string& filename);
   void LoadFromFile(const std::string& filename, const size_t& offset = 0, const size_t& size = 0);
-  void LoadFromMemory(const char* buffer, size_t buffer_size);
+  void LoadFromMemory(void* buffer, size_t buffer_size);
 };
 
 /*
@@ -480,6 +484,22 @@ NaiveBuffer& operator>>(NaiveBuffer& os, T& v) {
   PrimaryBuilder<T> builder(&os);
   builder.Load();
   v = builder.data();
+  return os;
+}
+
+static NaiveBuffer& operator<<(NaiveBuffer& os, const std::string& v) {
+  PrimaryListBuilder<char> builder(&os);
+  builder.set(v.data(), v.size());
+  builder.Flush();
+  return os;
+}
+
+static NaiveBuffer& operator>>(NaiveBuffer& os, std::string& v) {
+  PrimaryListBuilder<char> builder(&os);
+  builder.Load();
+
+  v.resize(builder.size());
+  memcpy(v.data(), builder.data(), builder.size());
   return os;
 }
 

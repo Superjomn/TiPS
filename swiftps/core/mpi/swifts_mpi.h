@@ -3,6 +3,8 @@
 #include <mpi.h>
 #include <stdint.h>
 
+#include "swiftps/core/common/naive_buffer.h"
+
 namespace swifts {
 
 // MPI data types
@@ -52,12 +54,18 @@ struct mpi_type_trait<unsigned long long> {
 // @}
 
 inline MPI_Comm mpi_comm() { return MPI_COMM_WORLD; }
+int mpi_rank();
 
-class MpiCtx {
+class MpiContext {
  public:
-  MpiCtx();
+  MpiContext();
 
-  MpiCtx& Global();
+  // Get the ip address of this node.
+  const std::string& ip() const { return ip_table_[mpi_rank()]; }
+  // Get the ip address of a specific rank.
+  const std::string& ip(int rank) const { return ip_table_[rank]; }
+
+  static MpiContext& Global();
 
  private:
   std::vector<std::string> ip_table_;
@@ -72,12 +80,37 @@ T mpi_allreduce(T x, MPI_Op op) {
 
 template <typename T>
 void mpi_broadcast(T* p, int count, int root) {
-  // TBD
+  NaiveBuffer wbuffer;
+  int len = 0;
+
+  if (mpi_rank() == root) {
+    for (int i = 0; i < count; i++) {
+      wbuffer << p[i];
+    }
+    len = wbuffer.size();
+  }
+
+  LOG(INFO) << "data len: " << len;
+  // broadcast from root to all other nodes
+  MPI_Bcast(&len, 1, mpi_type_trait<int32_t>::type(), root, mpi_comm());
+
+  if (len > 0 && wbuffer.size() == 0) {
+    wbuffer.Require(len);
+  }
+  MPI_Bcast(reinterpret_cast<void*>(wbuffer.data()), len, MPI_BYTE, root, mpi_comm());
+
+  // read the data
+  NaiveBuffer rbuffer(static_cast<char*>(wbuffer.data()), wbuffer.size());
+  for (int i = 0; i < count; i++) {
+    rbuffer >> p[i];
+  }
 }
 
-int mpi_size() {
+inline void mpi_barrier() { MPI_Barrier(mpi_comm()); }
+
+inline int mpi_size() {
   int size;
-  CHECK_EQ(MPI_Comm_size(mpi_comm(), &size), 0);
+  ZCHECK(MPI_Comm_size(mpi_comm(), &size));
   return size;
 }
 

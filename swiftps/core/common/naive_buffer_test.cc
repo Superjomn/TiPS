@@ -18,7 +18,22 @@ void TestPodValue(POD v) {
 TEST(NaiveBuffer, POD) {
   TestPodValue(1.23);  // float
   TestPodValue(123);   // int32_t
-  TestPodValue(true);   // bool
+  TestPodValue(true);  // bool
+}
+
+TEST(NaiveBuffer, string) {
+  NaiveBuffer buffer;
+  std::string v = "hello world!";
+  buffer << v;
+  buffer << 123;
+
+  NaiveBuffer read_buffer(buffer.data(), buffer.size());
+  std::string v0;
+  int v1;
+  read_buffer >> v0 >> v1;
+
+  ASSERT_EQ(v0, v);
+  ASSERT_EQ(v1, 123);
 }
 
 }  // namespace swifts

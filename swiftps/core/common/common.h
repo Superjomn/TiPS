@@ -2,7 +2,6 @@
 
 #include <errno.h>
 #include <glog/logging.h>
-#include <unordered_map>
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <string.h>
@@ -10,6 +9,9 @@
 
 #include <string>
 #include <type_traits>
+#include <unordered_map>
+
+#include "swiftps/core/common/macro.h"
 
 namespace swifts {
 
@@ -30,6 +32,8 @@ auto ignore_signal_call(FUNC&& func, ARGS&&... args) -> typename std::result_of<
 std::string GetLocalIp();
 
 std::string StringFormat(const std::string& fmt_str, ...);
+
+#define ZCHECK(op) CHECK_EQ((op), 0)
 
 template <typename Elem>
 class OrderedMap {
@@ -56,6 +60,5 @@ class OrderedMap {
   std::vector<Elem>& elements() { return list_; }
   const std::vector<Elem>& elements() const { return list_; }
 };
-
 
 }  // namespace swifts

@@ -1,4 +1,4 @@
 core_gather_srcs(SRCS
-        mpi.cc
+        swifts_mpi.cc
         mpi_context.cc
         )
