@@ -46,29 +46,14 @@ using RpcCallback = std::function<void(const RpcMsgHead&, NaiveBuffer&)>;
 
 class RpcService {
  public:
-  explicit RpcService(RpcCallback callback) : callback_(std::move(callback)) {
-    remote_service_ptrs_.resize(mpi_size(), nullptr);
-    RpcService* my_ptr = this;
-    CHECK_EQ(sizeof(void*), sizeof(long long));
-    MPI_Allgather(&my_ptr, 1, MPI_LONG_LONG, &remote_service_ptrs_[0], 1, MPI_LONG_LONG, mpi_comm());
-    mpi_barrier();
-
-    if (mpi_rank() == 0) {
-      for (int i = 0; i < mpi_size(); i++) {
-        LOG(INFO) << i << "-service: " << remote_service_ptrs_[i];
-      }
-    }
-  }
+  explicit RpcService(RpcCallback callback);
 
   ~RpcService() {
     MPI_Barrier(mpi_comm());
     CHECK_EQ(request_counter_, 0);
   }
 
-  RpcService* remote_service(size_t rank) {
-    CHECK_LT(rank, remote_service_ptrs_.size());
-    return remote_service_ptrs_[rank];
-  }
+  RpcService* remote_service(size_t rank);
 
   RpcCallback& callback() { return callback_; }
 
@@ -105,9 +90,9 @@ class RpcServer {
 
   void Finalize();
 
-  void SendRequest(int server_id, RpcService* service, NaiveBuffer* bufs, int n, RpcCallback callback);
+  void SendRequest(int server_id, RpcService* service, const NaiveBuffer& buf, RpcCallback callback);
 
-  void SendResponse(RpcMsgHead head, NaiveBuffer* bufs, int n);
+  void SendResponse(RpcMsgHead head, const NaiveBuffer& buf);
 
   ~RpcServer();
 
@@ -116,7 +101,7 @@ class RpcServer {
  private:
   int BindRandomPort();
   void Run();
-  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, NaiveBuffer* bufs, size_t n);
+  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const NaiveBuffer& buf);
 
  private:
   int num_connection_{1};

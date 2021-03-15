@@ -72,16 +72,14 @@ void RpcServer::Run() {
   }
 }
 
-std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, NaiveBuffer *bufs, size_t n) {
+std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const NaiveBuffer &buf) {
   CHECK_NE(head.server_id, -1);
   CHECK_NE(head.client_id, -1);
   CHECK(head.service);
   CHECK(head.request);
 
   size_t len = sizeof(head);
-  for (size_t i = 0; i < n; i++) {
-    len += bufs[i].size();
-  }
+  len += buf.size();
 
   auto msg = std::make_unique<ZmqMessage>();
   msg->Resize(len);
@@ -90,15 +88,12 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, Naive
   memcpy(msg->buffer() + len, &head, sizeof(head));
   len += sizeof(head);
 
-  for (size_t i = 0; i < n; i++) {
-    memcpy(msg->buffer() + len, bufs[i].data(), bufs[i].size());
-    len += bufs[i].size();
-  }
+  memcpy(msg->buffer() + len, buf.data(), buf.size());
 
   return msg;
 }
 
-void RpcServer::SendResponse(RpcMsgHead head, NaiveBuffer *bufs, int n) {
+void RpcServer::SendResponse(RpcMsgHead head, const NaiveBuffer &buf) {
   CHECK_EQ(head.server_id, mpi_rank());
   CHECK_GE(head.client_id, 0);
   CHECK_LT(head.client_id, mpi_size());
@@ -114,13 +109,13 @@ void RpcServer::SendResponse(RpcMsgHead head, NaiveBuffer *bufs, int n) {
   VLOG(3) << "- service " << head.service;
   VLOG(3) << "--------";
 
-  auto msg = MakeMessage(head, bufs, n);
+  auto msg = MakeMessage(head, buf);
   sender_mutexs_[head.client_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[head.client_id], 0), 0);
   sender_mutexs_[head.client_id].unlock();
 }
 
-void RpcServer::SendRequest(int server_id, RpcService *service, NaiveBuffer *bufs, int n, RpcCallback callback) {
+void RpcServer::SendRequest(int server_id, RpcService *service, const NaiveBuffer &buf, RpcCallback callback) {
   CHECK_GE(server_id, 0);
   CHECK_LT(server_id, mpi_size());
   CHECK(service);
@@ -136,7 +131,7 @@ void RpcServer::SendRequest(int server_id, RpcService *service, NaiveBuffer *buf
   head.message_type = RpcMsgType::REQUEST;
 
   VLOG(4) << "to send request.service " << head.service;
-  auto msg = MakeMessage(head, bufs, n);
+  auto msg = MakeMessage(head, buf);
   sender_mutexs_[server_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[server_id], 0), 0);
   sender_mutexs_[server_id].unlock();
@@ -245,4 +240,22 @@ std::ostream &operator<<(std::ostream &os, RpcMsgType type) {
   return os;
 }
 
+RpcService::RpcService(RpcCallback callback) : callback_(std::move(callback)) {
+  remote_service_ptrs_.resize(mpi_size(), nullptr);
+  RpcService *my_ptr = this;
+  CHECK_EQ(sizeof(void *), sizeof(long long));
+  MPI_Allgather(&my_ptr, 1, MPI_LONG_LONG, &remote_service_ptrs_[0], 1, MPI_LONG_LONG, mpi_comm());
+  mpi_barrier();
+
+  if (mpi_rank() == 0) {
+    for (int i = 0; i < mpi_size(); i++) {
+      LOG(INFO) << i << "-service: " << remote_service_ptrs_[i];
+    }
+  }
+}
+
+RpcService *RpcService::remote_service(size_t rank) {
+  CHECK_LT(rank, remote_service_ptrs_.size());
+  return remote_service_ptrs_[rank];
+}
 }  // namespace swifts

@@ -32,7 +32,7 @@ void TestRpc() {
 
       NaiveBuffer write_buf;
       write_buf << mpi_rank();
-      server.SendResponse(response_head, &write_buf, 1);
+      server.SendResponse(response_head, write_buf);
     }
 
     if (head.message_type == RpcMsgType::RESPONSE) {
@@ -55,13 +55,13 @@ void TestRpc() {
       NaiveBuffer writebuf;
       writebuf << 1;
       writebuf << std::string("hello node1");
-      server.SendRequest(1, service, &writebuf, 1, callback);
+      server.SendRequest(1, service, writebuf, callback);
     }
     {
       NaiveBuffer writebuf;
       writebuf << 2;
       writebuf << std::string("hello node2");
-      server.SendRequest(2, service, &writebuf, 1, callback);
+      server.SendRequest(2, service, writebuf, callback);
     }
   }
 

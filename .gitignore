@@ -131,3 +131,10 @@ dmypy.json
 .idea/*
 cmake-build-debug/*
 build/*
+
+*.out
+*.so
+*.a
+*.o
+
+~*
