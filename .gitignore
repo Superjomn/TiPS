@@ -129,3 +129,5 @@ dmypy.json
 .pyre/
 
 .idea/*
+cmake-build-debug/*
+build/*
