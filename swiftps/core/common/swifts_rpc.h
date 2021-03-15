@@ -61,7 +61,6 @@ class RpcService {
   }
 
   ~RpcService() {
-    LOG(INFO) << "to desc Service...";
     MPI_Barrier(mpi_comm());
     CHECK_EQ(request_counter_, 0);
   }
@@ -73,16 +72,8 @@ class RpcService {
 
   RpcCallback& callback() { return callback_; }
 
-  void IncRequest() {
-    LOG(INFO) << mpi_rank() << " Inc this: " << this;
-    ++request_counter_;
-    LOG(INFO) << mpi_rank() << " done Inc this: " << this << " get " << request_counter_;
-  }
-  void DecRequest() {
-    LOG(INFO) << mpi_rank() << " Dec this: " << this;
-    --request_counter_;
-    LOG(INFO) << mpi_rank() << " done Dec this: " << this << " get " << request_counter_;
-  }
+  void IncRequest() { ++request_counter_; }
+  void DecRequest() { --request_counter_; }
 
   SWIFTS_DISALLOW_COPY_AND_ASSIGN(RpcService)
 

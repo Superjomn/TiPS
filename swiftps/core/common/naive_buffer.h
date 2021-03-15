@@ -59,6 +59,7 @@ template <typename T>
 Type StdTypeToRepr() {
   return Type::UNK;
 }
+
 template <>
 Type StdTypeToRepr<int32_t>();
 template <>
@@ -100,6 +101,8 @@ struct NaiveBuffer {
 
   /// Consume some memory.
   void Consume(size_t bytes);
+
+  void ToHead() { cursor_ = 0; }
 
   /// The current position of cursor for save or load.
   byte_t* cursor() { return &bytes_[cursor_]; }

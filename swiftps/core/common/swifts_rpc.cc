@@ -40,35 +40,26 @@ void RpcServer::Run() {
     }
 
     NaiveBuffer in_buf;
-    if (msg.length() >= sizeof(*msg.zmq_msg())) {
-      in_buf.LoadFromMemory(msg.buffer(), msg.length());
-      msg.Release();
-    } else {
-      in_buf.Require(msg.length());
-      memcpy(in_buf.data(), msg.buffer(), msg.length());
-      in_buf.Consume(msg.length());
-    }
+    in_buf.LoadFromMemory(msg.buffer(), msg.length());
+    msg.Release();
 
     // Parse the message content.
     NaiveBuffer read_buf(in_buf.data(), in_buf.size());  // TODO(Superjomn) support zero copy
+    CHECK_EQ(read_buf.data(), read_buf.cursor());
     RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(read_buf.cursor());
     read_buf.Consume(sizeof(RpcMsgHead));
-
-    LOG(INFO) << mpi_rank() << " .. get message.service " << head->service;
 
     switch (head->message_type) {
       case RpcMsgType::REQUEST: {
         CHECK_EQ(head->server_id, mpi_rank());
-        LOG(INFO) << mpi_rank() << " get request message.service " << head->service;
         head->service->callback()(*head, read_buf);
       } break;
 
       case RpcMsgType::RESPONSE: {
-        LOG(INFO) << mpi_rank() << " get response message service " << head->service;
         CHECK_EQ(head->client_id, mpi_rank());
-        LOG(INFO) << "call response callback...";
+        VLOG(3) << "call response callback...";
         head->request->callback()(*head, read_buf);
-        LOG(INFO) << "done call response callback...";
+        VLOG(3) << "done call response callback...";
         CHECK(head->request);
         delete head->request;
         CHECK(head->service);
@@ -87,9 +78,6 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, Naive
   CHECK(head.service);
   CHECK(head.request);
 
-  LOG(INFO) << "Making message: ";
-  LOG(INFO) << "msg.service: " << head.service;
-  LOG(INFO) << "------";
   size_t len = sizeof(head);
   for (size_t i = 0; i < n; i++) {
     len += bufs[i].size();
@@ -103,7 +91,6 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, Naive
   len += sizeof(head);
 
   for (size_t i = 0; i < n; i++) {
-    // CHECK_EQ(static_cast<void *>(bufs[i].data()), static_cast<void *>(bufs[i].cursor()));
     memcpy(msg->buffer() + len, bufs[i].data(), bufs[i].size());
     len += bufs[i].size();
   }
@@ -116,22 +103,21 @@ void RpcServer::SendResponse(RpcMsgHead head, NaiveBuffer *bufs, int n) {
   CHECK_GE(head.client_id, 0);
   CHECK_LT(head.client_id, mpi_size());
 
-  LOG(INFO) << mpi_rank() << " to send response...";
+  VLOG(2) << mpi_rank() << " to send response...";
 
   head.service      = head.service->remote_service(head.client_id);
   head.message_type = RpcMsgType::RESPONSE;
 
-  LOG(INFO) << mpi_rank() << " to send response";
-  LOG(INFO) << "- server_id " << head.server_id;
-  LOG(INFO) << "- client_id " << head.client_id;
-  LOG(INFO) << "- service " << head.service;
-  LOG(INFO) << "--------";
+  VLOG(3) << mpi_rank() << " to send response";
+  VLOG(3) << "- server_id " << head.server_id;
+  VLOG(3) << "- client_id " << head.client_id;
+  VLOG(3) << "- service " << head.service;
+  VLOG(3) << "--------";
 
   auto msg = MakeMessage(head, bufs, n);
   sender_mutexs_[head.client_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[head.client_id], 0), 0);
   sender_mutexs_[head.client_id].unlock();
-  LOG(INFO) << mpi_rank() << " finish send response";
 }
 
 void RpcServer::SendRequest(int server_id, RpcService *service, NaiveBuffer *bufs, int n, RpcCallback callback) {
@@ -149,7 +135,7 @@ void RpcServer::SendRequest(int server_id, RpcService *service, NaiveBuffer *buf
   head.server_id    = server_id;
   head.message_type = RpcMsgType::REQUEST;
 
-  LOG(INFO) << "to send request.service " << head.service;
+  VLOG(4) << "to send request.service " << head.service;
   auto msg = MakeMessage(head, bufs, n);
   sender_mutexs_[server_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[server_id], 0), 0);
@@ -157,10 +143,10 @@ void RpcServer::SendRequest(int server_id, RpcService *service, NaiveBuffer *buf
 }
 
 void RpcServer::Finalize() {
-  LOG(INFO) << "#### to finalize";
+  VLOG(1) << "#### to finalize";
   CHECK(zmq_ctx_);
 
-  LOG(INFO) << "tell all the threads to quit";
+  VLOG(3) << "tell all the threads to quit";
   for (int i = 0; i < num_threads_; i++) {
     sender_mutexs_[mpi_rank()].lock();
     CHECK_GE(ignore_signal_call(zmq_msg_send, ZmqMessage().zmq_msg(), senders_[mpi_rank()], 0), 0);
@@ -191,13 +177,11 @@ void RpcServer::Initialize() {
 
   CHECK(receiver_ = zmq_socket(zmq_ctx_, ZMQ_PULL));
 
-  LOG(INFO) << "zmq_setsockopt ...";
   int v0 = 0;
   int v1 = 3000;
   ZCHECK(zmq_setsockopt(receiver_, ZMQ_RCVHWM, &v0, sizeof(int)));
   ZCHECK(zmq_setsockopt(receiver_, ZMQ_BACKLOG, &v1, sizeof(int)));
 
-  LOG(INFO) << "Initialize senders";
   senders_.resize(mpi_size());
 
   for (int i = 0; i < mpi_size(); i++) {
@@ -208,12 +192,9 @@ void RpcServer::Initialize() {
   std::vector<std::mutex> tmp_muts(mpi_size());
   sender_mutexs_.swap(tmp_muts);
 
-  LOG(INFO) << "To connect send socket...";
   for (int conn = 0; conn < num_connection_; conn++) {
     std::vector<int> ports(mpi_size());
-    LOG(INFO) << "to assign random port...";
     ports[mpi_rank()] = BindRandomPort();
-    LOG(INFO) << "get random port: " << ports[mpi_rank()];
     // No need to check port duplication, the ZMQ connect will fail if duplcate.
     CHECK_EQ(MPI_Allgather(MPI_IN_PLACE, 0, MPI_INT, &ports[0], 1, MPI_INT, mpi_comm()), 0);
 
@@ -235,11 +216,9 @@ void RpcServer::Initialize() {
 
 int RpcServer::BindRandomPort() {
   for (;;) {
-    int port = 1024 + rand() % (65536 - 1024);
-    LOG(INFO) << "try port: " << port;
+    int port         = 1024 + rand() % (65536 - 1024);
     std::string addr = StringFormat("tcp://%s:%d", MpiContext::Global().ip().c_str(), port);
-    LOG(INFO) << "try addr: " << addr;
-    int res = 0;
+    int res          = 0;
     PCHECK((res = zmq_bind(receiver_, addr.c_str()), res == 0 || errno == EADDRINUSE));
 
     if (res == 0) {

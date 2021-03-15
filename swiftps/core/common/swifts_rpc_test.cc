@@ -22,47 +22,52 @@ void TestRpc() {
       response_head.service   = head.service;
       response_head.request   = head.request;
 
-      NaiveBuffer write_buf;
-      write_buf << 123;
+      int v;
+      std::string msg;
+      buffer >> v >> msg;
 
+      CHECK_EQ(v, mpi_rank());
+      CHECK_EQ(msg, "hello node" + std::to_string(mpi_rank()));
+      LOG(INFO) << mpi_rank() << " get message from master: " << msg;
+
+      NaiveBuffer write_buf;
+      write_buf << mpi_rank();
       server.SendResponse(response_head, &write_buf, 1);
     }
+
     if (head.message_type == RpcMsgType::RESPONSE) {
       LOG(INFO) << "server " << mpi_rank() << " get a response";
     }
   };
 
   CHECK_EQ(mpi_size(), 3);
-  LOG(INFO) << "rank: " << mpi_rank();
   auto* service = server.AddService(callback);
 
   LOG(INFO) << "to Intialize server";
   server.Initialize();
   mpi_barrier();
-  LOG(INFO) << "server initialized";
 
   if (mpi_rank() == 0) {
-    NaiveBuffer writebuf;
-    writebuf << 123;
-
-    RpcCallback callback = [&server](RpcMsgHead head, NaiveBuffer& buf) {
-      LOG(INFO) << "master get head " << head.message_type;
-    };
+    RpcCallback callback = [&server](RpcMsgHead head, NaiveBuffer& buf) {};
 
     LOG(INFO) << "master send request...";
-    server.SendRequest(1, service, &writebuf, 1, callback);
-    server.SendRequest(2, service, &writebuf, 1, callback);
-
-    NaiveBuffer emptybuf;
-    server.SendRequest(1, service, &emptybuf, 1, callback);
-    server.SendRequest(2, service, &emptybuf, 1, callback);
+    {
+      NaiveBuffer writebuf;
+      writebuf << 1;
+      writebuf << std::string("hello node1");
+      server.SendRequest(1, service, &writebuf, 1, callback);
+    }
+    {
+      NaiveBuffer writebuf;
+      writebuf << 2;
+      writebuf << std::string("hello node2");
+      server.SendRequest(2, service, &writebuf, 1, callback);
+    }
   }
 
   mpi_barrier();
   std::this_thread::sleep_for(2000ms);
   server.Finalize();
-
-  LOG(INFO) << "final";
 }
 
 }  // namespace swifts

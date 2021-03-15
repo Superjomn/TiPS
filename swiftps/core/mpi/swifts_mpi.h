@@ -90,7 +90,6 @@ void mpi_broadcast(T* p, int count, int root) {
     len = wbuffer.size();
   }
 
-  LOG(INFO) << "data len: " << len;
   // broadcast from root to all other nodes
   MPI_Bcast(&len, 1, mpi_type_trait<int32_t>::type(), root, mpi_comm());
 

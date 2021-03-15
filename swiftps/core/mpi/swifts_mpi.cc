@@ -10,7 +10,6 @@ MpiContext &MpiContext::Global() {
 }
 
 MpiContext::MpiContext() {
-  LOG(INFO) << "Initalize global MPI Context";
   int rank;
   int size;
   CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);
@@ -18,9 +17,7 @@ MpiContext::MpiContext() {
 
   ip_table_.resize(mpi_size(), "");
   ip_table_[rank] = GetLocalIp();
-  LOG(INFO) << "local ip: " << ip_table_[rank];
 
-  LOG(INFO) << "to broadcast ip_table ...";
   for (int i = 0; i < mpi_size(); i++) {
     mpi_broadcast(&ip_table_[i], 1, i);
   }
