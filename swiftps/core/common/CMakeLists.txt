@@ -3,7 +3,7 @@ core_gather_srcs(SRCS
         managed_thread.cc
         thread_pool.cc
         semaphore.cc
-        swifts_rpc.cc
+        naive_rpc.cc
         naive_buffer.cc
         zmq_message.cc
         )

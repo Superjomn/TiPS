@@ -1,4 +1,4 @@
-#include "swiftps/core/common/swifts_rpc.h"
+#include "swiftps/core/common/naive_rpc.h"
 
 namespace swifts {
 
