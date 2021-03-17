@@ -1,0 +1,47 @@
+repos:
+-   repo: https://github.com/Lucas-C/pre-commit-hooks.git
+    sha: v1.0.1
+    hooks:
+    -   id: remove-crlf
+        files: (?!.*third_party)^.*$ | (?!.*book)^.*$
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    sha: 5bf6c09bfa1297d3692cadd621ef95f1284e33c0
+    hooks:
+    -   id: check-added-large-files
+    -   id: check-merge-conflict
+    -   id: check-symlinks
+    -   id: detect-private-key
+        files: (?!.*third_party)^.*$ | (?!.*book)^.*$
+    -   id: end-of-file-fixer
+-   repo: local
+    hooks:
+    -   id: clang-format-with-version-check
+        name: clang-format
+        description: Format files with ClangFormat.
+        entry: bash ./tools/clang_format.hook -i
+        language: system
+        files: \.(c|cc|cxx|cpp|cu|h|hpp|hxx)$
+# -   repo: local
+#     hooks:
+#     -   id: cpplint-cpp-source
+#         name: cpplint
+#         description: Check C++ code style using cpplint.py.
+#         entry: bash ./tools/codestyle/cpplint_pre_commit.hook
+#         language: system
+#         files: \.(c|cc|cxx|cpp|cu|h|hpp|hxx)$
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.5.0
+    hooks:
+    -   id: check-added-large-files
+        args: [--maxkb=500]
+
+# -   repo: https://github.com/pre-commit/pre-commit-hooks
+#     rev: v1.2.3
+#     hooks:
+#     - id: flake8
+
+-   repo: https://github.com/pre-commit/mirrors-yapf.git
+    rev: v0.26.0
+    hooks:
+    - id: yapf
+      args: ['--parallel', '--in-place']

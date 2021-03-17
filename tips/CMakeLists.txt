@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(tips)
+project(swiftsnails2)
 
 # for IDE
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -62,7 +62,7 @@ include_directories(${ZeroMQ_INCLUDE_DIR})
 
 set(core_src CACHE INTERNAL "" FORCE)
 
-add_subdirectory(tips)
+add_subdirectory(swiftps)
 
-cc_library(tipscore SRCS ${core_src} DEPS glog)
-target_link_libraries(tipscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY})
+cc_library(swiftscore SRCS ${core_src} DEPS glog)
+target_link_libraries(swiftscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY})

@@ -36,16 +36,16 @@ function(cc_library TARGET_NAME)
   endif(cc_library_SRCS)
 
   if (
-  (NOT ("${TARGET_NAME}" STREQUAL "tips_gtest_main"))  AND
+  (NOT ("${TARGET_NAME}" STREQUAL "swifts_gtest_main"))  AND
   (NOT ("${TARGET_NAME}" STREQUAL "utils")) AND
-  (NOT ("${TARGET_NAME}" STREQUAL "tips_lib"))
+  (NOT ("${TARGET_NAME}" STREQUAL "swifts_lib"))
   )
     target_link_libraries(${TARGET_NAME} ${isl_lib} ${ginac_lib} Threads::Threads)
 
   endif (
-  (NOT ("${TARGET_NAME}" STREQUAL "tips_gtest_main"))  AND
+  (NOT ("${TARGET_NAME}" STREQUAL "swifts_gtest_main"))  AND
   (NOT ("${TARGET_NAME}" STREQUAL "utils")) AND
-  (NOT ("${TARGET_NAME}" STREQUAL "tips_lib"))
+  (NOT ("${TARGET_NAME}" STREQUAL "swifts_lib"))
   )
 endfunction(cc_library)
 
@@ -60,7 +60,7 @@ function(cc_test TARGET_NAME)
     cmake_parse_arguments(cc_test "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     add_executable(${TARGET_NAME} ${cc_test_SRCS})
     get_property(os_dependency_modules GLOBAL PROPERTY OS_DEPENDENCY_MODULES)
-    target_link_libraries(${TARGET_NAME} ${cc_test_DEPS} ${os_dependency_modules} tips_gtest_main gtest gflags glog)
+    target_link_libraries(${TARGET_NAME} ${cc_test_DEPS} ${os_dependency_modules} swifts_gtest_main gtest gflags glog)
     add_dependencies(${TARGET_NAME} ${cc_test_DEPS} gtest_main gtest gflags glog extern_gtest)
 
     add_test(NAME ${TARGET_NAME}
@@ -142,9 +142,9 @@ function(nv_test TARGET_NAME)
     cmake_parse_arguments(nv_test "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     cuda_add_executable(${TARGET_NAME} ${nv_test_SRCS})
     get_property(os_dependency_modules GLOBAL PROPERTY OS_DEPENDENCY_MODULES)
-    target_link_libraries(${TARGET_NAME} ${nv_test_DEPS} tips_gtest_main gtest
+    target_link_libraries(${TARGET_NAME} ${nv_test_DEPS} swifts_gtest_main gtest
 gflags glog ${os_dependency_modules} ${CUDNN_LIBRARY} ${CUBLAS_LIBRARIES} ${CUDA_LIBRARIES})
-    add_dependencies(${TARGET_NAME} ${nv_test_DEPS} tips_gtest_main gtest gflags glog)
+    add_dependencies(${TARGET_NAME} ${nv_test_DEPS} swifts_gtest_main gtest gflags glog)
     common_link(${TARGET_NAME})
     # add_test(${TARGET_NAME} ${TARGET_NAME})
     add_test(NAME ${TARGET_NAME}
@@ -363,7 +363,7 @@ function(download_and_uncompress INSTALL_DIR URL FILENAME)
     )
 endfunction()
 
-# Add a source file to tipscore library.
+# Add a source file to swiftscore library.
 # @param src_names: a list of strings
 # usage:
 # core_gather_srcs(SRCS a.cc b.cc c.cc)
