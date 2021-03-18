@@ -13,6 +13,7 @@
 # limitations under the License.
 
 INCLUDE(ExternalProject)
+message(STATUS "************** GLOG")
 
 SET(GLOG_SOURCES_DIR ${THIRD_PARTY_PATH}/glog)
 SET(GLOG_INSTALL_DIR ${THIRD_PARTY_PATH}/install/glog)

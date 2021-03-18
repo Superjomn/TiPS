@@ -1,0 +1,10 @@
+namespace tips.test.test_message0;
+
+table MessageRequest {
+  greet: string;
+  v :int;
+}
+
+table MessageResponse {
+  from_rank: int;
+}

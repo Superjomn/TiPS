@@ -138,3 +138,4 @@ build/*
 *.o
 
 ~*
+*_generated.h

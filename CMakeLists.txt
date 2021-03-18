@@ -39,6 +39,7 @@ include(cmake/external/gflags.cmake)
 include(cmake/external/glog.cmake)
 include(cmake/external/gtest.cmake)
 include(cmake/external/openmpi.cmake)
+include(cmake/external/flatbuffers.cmake)
 find_package(Threads REQUIRED)
 ## load in pkg-config support
 find_package(PkgConfig)
