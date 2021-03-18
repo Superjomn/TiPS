@@ -1,5 +1,4 @@
 #include "tips/core/common/naive_rpc.h"
-#include <boost/functional/hash.hpp>
 
 namespace tips {
 
@@ -9,7 +8,7 @@ RpcServer::~RpcServer() {
   }
 }
 
-RpcService *RpcServer::AddService(RpcCallback2 callback) {
+RpcService *RpcServer::AddService(RpcCallback callback) {
   auto *new_service = new RpcService(std::move(callback));
   services_.insert(new_service);
   return new_service;
@@ -40,23 +39,26 @@ void RpcServer::StartRunLoop() {
       continue;
     }
 
-    uint8_t *buffer = reinterpret_cast<uint8_t *>(msg.buffer());
-    LOG(INFO) << "get msg.size: " << msg.length();
+    NaiveBuffer in_buf;
+    in_buf.LoadFromMemory(msg.buffer(), msg.length());
+    msg.Release();
 
     // Parse the message content.
-    RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(buffer);
-    buffer += sizeof(RpcMsgHead);  // buffer move cursor to start of the flatbuffers message.
+    NaiveBuffer read_buf(in_buf.data(), in_buf.size());  // TODO(Superjomn) support zero copy
+    CHECK_EQ(read_buf.data(), read_buf.cursor());
+    RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(read_buf.cursor());
+    read_buf.Consume(sizeof(RpcMsgHead));
 
     switch (head->message_type) {
       case RpcMsgType::REQUEST: {
         CHECK_EQ(head->server_id, mpi_rank());
-        head->service->callback()(*head, buffer);
+        head->service->callback()(*head, read_buf);
       } break;
 
       case RpcMsgType::RESPONSE: {
         CHECK_EQ(head->client_id, mpi_rank());
         VLOG(3) << "call response callback...";
-        head->request->callback()(*head, buffer);
+        head->request->callback()(*head, read_buf);
         VLOG(3) << "done call response callback...";
         CHECK(head->request);
         delete head->request;
@@ -67,8 +69,6 @@ void RpcServer::StartRunLoop() {
       default:
         LOG(FATAL) << "Unknown message type found";
     }
-
-    msg.Release();
   }
 }
 
@@ -93,28 +93,7 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const
   return msg;
 }
 
-std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head,
-                                                   const flatbuffers::FlatBufferBuilder &builder) {
-  CHECK_NE(head.server_id, -1);
-  CHECK_NE(head.client_id, -1);
-  CHECK(head.service);
-  CHECK(head.request);
-
-  size_t len = sizeof(head);
-  len += builder.GetSize();
-
-  auto msg = std::make_unique<ZmqMessage>();
-  msg->Resize(len);
-
-  std::memcpy(msg->buffer(), &head, sizeof(head));
-
-  len = sizeof(RpcMsgHead);
-  std::memcpy(msg->buffer() + len, builder.GetBufferPointer(), len);
-
-  return msg;
-}
-
-void RpcServer::SendResponse(RpcMsgHead head, const flatbuffers::FlatBufferBuilder &builder) {
+void RpcServer::SendResponse(RpcMsgHead head, const NaiveBuffer &buf) {
   CHECK_EQ(head.server_id, mpi_rank());
   CHECK_GE(head.client_id, 0);
   CHECK_LT(head.client_id, mpi_size());
@@ -130,16 +109,13 @@ void RpcServer::SendResponse(RpcMsgHead head, const flatbuffers::FlatBufferBuild
   VLOG(3) << "- service " << head.service;
   VLOG(3) << "--------";
 
-  auto msg = MakeMessage(head, builder);
+  auto msg = MakeMessage(head, buf);
   sender_mutexs_[head.client_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[head.client_id], 0), 0);
   sender_mutexs_[head.client_id].unlock();
 }
 
-void RpcServer::SendRequest(int server_id,
-                            RpcService *service,
-                            const flatbuffers::FlatBufferBuilder &builder,
-                            RpcCallback2 callback) {
+void RpcServer::SendRequest(int server_id, RpcService *service, const NaiveBuffer &buf, RpcCallback callback) {
   CHECK_GE(server_id, 0);
   CHECK_LT(server_id, mpi_size());
   CHECK(service);
@@ -154,11 +130,8 @@ void RpcServer::SendRequest(int server_id,
   head.server_id    = server_id;
   head.message_type = RpcMsgType::REQUEST;
 
-  LOG(INFO) << "send request buffer hash: "
-            << boost::hash_range(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
-
   VLOG(4) << "to send request.service " << head.service;
-  auto msg = MakeMessage(head, builder);
+  auto msg = MakeMessage(head, buf);
   sender_mutexs_[server_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[server_id], 0), 0);
   sender_mutexs_[server_id].unlock();
@@ -267,7 +240,7 @@ std::ostream &operator<<(std::ostream &os, RpcMsgType type) {
   return os;
 }
 
-RpcService::RpcService(RpcCallback2 callback) : callback_(std::move(callback)) {
+RpcService::RpcService(RpcCallback callback) : callback_(std::move(callback)) {
   remote_service_ptrs_.resize(mpi_size(), nullptr);
   RpcService *my_ptr = this;
   CHECK_EQ(sizeof(void *), sizeof(long long));

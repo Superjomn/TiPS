@@ -1,6 +1,4 @@
 #include "tips/core/common/naive_rpc.h"
-#include <boost/functional/hash.hpp>
-#include "tips/core/message/test0_generated.h"
 
 #include <mpi.h>
 
@@ -9,32 +7,11 @@
 
 namespace tips {
 
-using namespace std::chrono_literals;  // NOLINT
-using namespace test::test_message0;   // NOLINT
-
-void UseFlats() {
-  flatbuffers::FlatBufferBuilder builder;
-  auto hello = builder.CreateString("hello world");
-
-  MessageRequestBuilder bb(builder);
-  bb.add_greet(hello);
-  bb.add_v(13);
-  auto bb_out = bb.Finish();
-  builder.Finish(bb_out);
-
-  LOG(INFO) << "buffer pointer: " << builder.GetBufferPointer();
-  int size = builder.GetSize();
-  LOG(INFO) << "size: " << size;
-
-  auto read = flatbuffers::GetRoot<MessageRequest>(builder.GetBufferPointer());
-  LOG(INFO) << "greet: " << read->greet()->str();
-  LOG(INFO) << "v: " << read->v();
-}
+using namespace std::chrono_literals;
 
 void TestRpc() {
   RpcServer server;
-  RpcCallback2 callback = [&server](const RpcMsgHead& head, uint8_t* buffer) {
-    CHECK(buffer);
+  RpcCallback callback = [&server](const RpcMsgHead& head, NaiveBuffer& buffer) {
     std::this_thread::sleep_for(500ms);
     if (head.message_type == RpcMsgType::REQUEST) {
       LOG(INFO) << "server " << mpi_rank() << " get a request";
@@ -45,24 +22,17 @@ void TestRpc() {
       response_head.service   = head.service;
       response_head.request   = head.request;
 
-      auto message = flatbuffers::GetRoot<MessageRequest>(buffer);
-      LOG(INFO) << "**** greeting " << message->greet()->c_str();
-      LOG(INFO) << "**** v " << message->v();
+      int v;
+      std::string msg;
+      buffer >> v >> msg;
 
-      int v    = message->v();
-      auto msg = message->greet()->str();
-
-      //CHECK_EQ(v, mpi_rank());
-      //CHECK_EQ(msg, "hello node" + std::to_string(mpi_rank()));
+      CHECK_EQ(v, mpi_rank());
+      CHECK_EQ(msg, "hello node" + std::to_string(mpi_rank()));
       LOG(INFO) << mpi_rank() << " get message from master: " << msg;
 
-      flatbuffers::FlatBufferBuilder write_builder;
-      auto write_message_builder = MessageResponseBuilder(write_builder);
-      write_message_builder.add_from_rank(mpi_rank());
-      auto end = write_message_builder.Finish();
-      write_builder.Finish(end);
-
-      server.SendResponse(response_head, write_builder);
+      NaiveBuffer write_buf;
+      write_buf << mpi_rank();
+      server.SendResponse(response_head, write_buf);
     }
 
     if (head.message_type == RpcMsgType::RESPONSE) {
@@ -78,46 +48,20 @@ void TestRpc() {
   mpi_barrier();
 
   if (mpi_rank() == 0) {
-    RpcCallback2 callback = [&server](RpcMsgHead head, uint8_t* buf) {};
+    RpcCallback callback = [&server](RpcMsgHead head, NaiveBuffer& buf) {};
 
     LOG(INFO) << "master send request...";
     {
-      flatbuffers::FlatBufferBuilder write_builder;
-      auto hello = write_builder.CreateString("hello node1");
-
-      auto request_message = MessageRequestBuilder(write_builder);
-      request_message.add_v(13);
-      request_message.add_greet(hello);
-      auto end = request_message.Finish();
-      write_builder.Finish(end);
-
-      LOG(INFO) << "send request greet: " << write_builder.GetSize();
-
-      {
-        std::string dup;
-        dup.resize(write_builder.GetSize());
-        memcpy(dup.data(), write_builder.GetBufferPointer(), write_builder.GetSize());
-        auto msg = flatbuffers::GetRoot<MessageRequest>(dup.data());
-        LOG(INFO) << "XXXX greet:" << msg->greet()->str();
-        LOG(INFO) << "data: ";
-
-        LOG(INFO) << "information hash: " << boost::hash_range(dup.data(), dup.data()+dup.size());
-      }
-
-
-      server.SendRequest(1, service, write_builder, callback);
+      NaiveBuffer writebuf;
+      writebuf << 1;
+      writebuf << std::string("hello node1");
+      server.SendRequest(1, service, writebuf, callback);
     }
     {
-      flatbuffers::FlatBufferBuilder write_builder;
-      auto hello = write_builder.CreateString("hello node2");
-
-      auto request_message = MessageRequestBuilder(write_builder);
-      request_message.add_v(14);
-      request_message.add_greet(hello);
-      auto end = request_message.Finish();
-      write_builder.Finish(end);
-
-      server.SendRequest(1, service, write_builder, callback);
+      NaiveBuffer writebuf;
+      writebuf << 2;
+      writebuf << std::string("hello node2");
+      server.SendRequest(2, service, writebuf, callback);
     }
   }
 
@@ -129,8 +73,6 @@ void TestRpc() {
 }  // namespace tips
 
 int main(int argc, char** argv) {
-  tips::UseFlats();
-
   MPI_Init(&argc, &argv);
 
   tips::TestRpc();

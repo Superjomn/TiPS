@@ -3,7 +3,6 @@
 #include <mpi.h>
 #include <zmq.h>
 
-#include <flatbuffers/flatbuffers.h>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -45,15 +44,14 @@ struct RpcMsgHead {
   RpcMsgType message_type;
 };
 
-using RpcCallback  = std::function<void(const RpcMsgHead&, NaiveBuffer&)>;
-using RpcCallback2 = std::function<void(const RpcMsgHead&, uint8_t* buffer)>;
+using RpcCallback = std::function<void(const RpcMsgHead&, NaiveBuffer&)>;
 
 /**
  * RpcService represents a service in the RPC framework. The callback will be invoked when a Request arrive.
  */
 class RpcService {
  public:
-  explicit RpcService(RpcCallback2 callback);
+  explicit RpcService(RpcCallback callback);
 
   ~RpcService() {
     MPI_Barrier(mpi_comm());
@@ -65,7 +63,7 @@ class RpcService {
    */
   RpcService* remote_service(size_t rank);
 
-  RpcCallback2& callback() { return callback_; }
+  RpcCallback& callback() { return callback_; }
 
   SWIFTS_DISALLOW_COPY_AND_ASSIGN(RpcService)
 
@@ -76,7 +74,7 @@ class RpcService {
   inline void DecRequest() { --request_counter_; }
 
  private:
-  RpcCallback2 callback_;
+  RpcCallback callback_;
 
   std::vector<RpcService*> remote_service_ptrs_;
 
@@ -85,12 +83,12 @@ class RpcService {
 
 class RpcRequest {
  public:
-  explicit RpcRequest(RpcCallback2 callback) : callback_(callback) {}
+  explicit RpcRequest(RpcCallback callback) : callback_(callback) {}
 
-  RpcCallback2& callback() { return callback_; }
+  RpcCallback& callback() { return callback_; }
 
  private:
-  RpcCallback2 callback_;
+  RpcCallback callback_;
 };
 
 /**
@@ -114,7 +112,6 @@ class RpcServer {
       : num_connection_(num_connection), num_listen_threads_(num_listen_threads), zmq_num_threads_(zmq_num_threads) {}
 
   RpcService* AddService(RpcCallback callback);
-  RpcService* AddService(RpcCallback2 callback);
 
   //! Initialize the server run loop.
   void Initialize();
@@ -124,14 +121,7 @@ class RpcServer {
 
   void SendRequest(int server_id, RpcService* service, const NaiveBuffer& buf, RpcCallback callback);
 
-  void SendRequest(int server_id,
-                   RpcService* service,
-                   const flatbuffers::FlatBufferBuilder& builder,
-                   RpcCallback2 callback);
-
   void SendResponse(RpcMsgHead head, const NaiveBuffer& buf);
-
-  void SendResponse(RpcMsgHead head, const flatbuffers::FlatBufferBuilder& builder);
 
   ~RpcServer();
 
@@ -143,7 +133,6 @@ class RpcServer {
   void StartRunLoop();
 
   std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const NaiveBuffer& buf);
-  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const flatbuffers::FlatBufferBuilder& builder);
 
  private:
   int num_connection_{1};
