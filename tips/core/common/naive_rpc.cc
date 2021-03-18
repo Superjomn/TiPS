@@ -1,4 +1,5 @@
 #include "tips/core/common/naive_rpc.h"
+#include <boost/functional/hash.hpp>
 
 namespace tips {
 
@@ -40,7 +41,7 @@ void RpcServer::StartRunLoop() {
     }
 
     uint8_t *buffer = reinterpret_cast<uint8_t *>(msg.buffer());
-    msg.Release();
+    LOG(INFO) << "get msg.size: " << msg.length();
 
     // Parse the message content.
     RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(buffer);
@@ -66,6 +67,8 @@ void RpcServer::StartRunLoop() {
       default:
         LOG(FATAL) << "Unknown message type found";
     }
+
+    msg.Release();
   }
 }
 
@@ -105,7 +108,7 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head,
 
   std::memcpy(msg->buffer(), &head, sizeof(head));
 
-  len = builder.GetSize();
+  len = sizeof(RpcMsgHead);
   std::memcpy(msg->buffer() + len, builder.GetBufferPointer(), len);
 
   return msg;
@@ -150,6 +153,9 @@ void RpcServer::SendRequest(int server_id,
   head.client_id    = mpi_rank();
   head.server_id    = server_id;
   head.message_type = RpcMsgType::REQUEST;
+
+  LOG(INFO) << "send request buffer hash: "
+            << boost::hash_range(builder.GetBufferPointer(), builder.GetBufferPointer() + builder.GetSize());
 
   VLOG(4) << "to send request.service " << head.service;
   auto msg = MakeMessage(head, builder);

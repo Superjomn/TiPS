@@ -1,4 +1,5 @@
 #include "tips/core/common/naive_rpc.h"
+#include <boost/functional/hash.hpp>
 #include "tips/core/message/test0_generated.h"
 
 #include <mpi.h>
@@ -45,12 +46,14 @@ void TestRpc() {
       response_head.request   = head.request;
 
       auto message = flatbuffers::GetRoot<MessageRequest>(buffer);
+      LOG(INFO) << "**** greeting " << message->greet()->c_str();
+      LOG(INFO) << "**** v " << message->v();
 
       int v    = message->v();
       auto msg = message->greet()->str();
 
-      CHECK_EQ(v, mpi_rank());
-      CHECK_EQ(msg, "hello node" + std::to_string(mpi_rank()));
+      //CHECK_EQ(v, mpi_rank());
+      //CHECK_EQ(msg, "hello node" + std::to_string(mpi_rank()));
       LOG(INFO) << mpi_rank() << " get message from master: " << msg;
 
       flatbuffers::FlatBufferBuilder write_builder;
@@ -83,10 +86,24 @@ void TestRpc() {
       auto hello = write_builder.CreateString("hello node1");
 
       auto request_message = MessageRequestBuilder(write_builder);
-      request_message.add_v(1);
+      request_message.add_v(13);
       request_message.add_greet(hello);
       auto end = request_message.Finish();
       write_builder.Finish(end);
+
+      LOG(INFO) << "send request greet: " << write_builder.GetSize();
+
+      {
+        std::string dup;
+        dup.resize(write_builder.GetSize());
+        memcpy(dup.data(), write_builder.GetBufferPointer(), write_builder.GetSize());
+        auto msg = flatbuffers::GetRoot<MessageRequest>(dup.data());
+        LOG(INFO) << "XXXX greet:" << msg->greet()->str();
+        LOG(INFO) << "data: ";
+
+        LOG(INFO) << "information hash: " << boost::hash_range(dup.data(), dup.data()+dup.size());
+      }
+
 
       server.SendRequest(1, service, write_builder, callback);
     }
@@ -95,7 +112,7 @@ void TestRpc() {
       auto hello = write_builder.CreateString("hello node2");
 
       auto request_message = MessageRequestBuilder(write_builder);
-      request_message.add_v(1);
+      request_message.add_v(14);
       request_message.add_greet(hello);
       auto end = request_message.Finish();
       write_builder.Finish(end);
