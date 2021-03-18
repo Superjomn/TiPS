@@ -40,6 +40,7 @@ include(cmake/external/glog.cmake)
 include(cmake/external/gtest.cmake)
 include(cmake/external/openmpi.cmake)
 include(cmake/external/flatbuffers.cmake)
+include(cmake/external/boost.cmake)
 find_package(Threads REQUIRED)
 ## load in pkg-config support
 find_package(PkgConfig)
@@ -65,5 +66,5 @@ set(core_src CACHE INTERNAL "" FORCE)
 
 add_subdirectory(tips)
 
-cc_library(tipscore SRCS ${core_src} DEPS glog)
+cc_library(tipscore SRCS ${core_src} DEPS glog boost)
 target_link_libraries(tipscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY})
