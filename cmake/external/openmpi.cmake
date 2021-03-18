@@ -32,7 +32,7 @@ include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(OpenMPI DEFAULT_MSG OpenMPI_LIBRARY OpenMPI_INCLUDE_DIR)
 
 if(OpenMPI_FOUND)
-	message("—- Found OpenMPI under ${OpenMPI_INCLUDE_DIR}")
+	message("Found OpenMPI under ${OpenMPI_INCLUDE_DIR}")
     set(OpenMPI_INCLUDE_DIRS ${OpenMPI_INCLUDE_DIR})
     set(OpenMPI_LIBRARIES ${OpenMPI_LIBRARY})
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
