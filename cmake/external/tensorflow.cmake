@@ -41,3 +41,5 @@ mark_as_advanced(Tensorflow_INCLUDE_DIRS Tensorflow_LIBRARIES Tensorflow_COMPILE
 message(STATUS "Found TensorFlow version ${Tensorflow_VERSION}")
 message(STATUS "Found TensorFlow include ${Tensorflow_INCLUDE_DIRS}")
 message(STATUS "Found TensorFlow libs ${Tensorflow_LIBRARIES}")
+
+include_directories(${Tensorflow_INCLUDE_DIRS})
