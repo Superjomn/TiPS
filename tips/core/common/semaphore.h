@@ -1,6 +1,6 @@
 #pragma once
-#include <semaphore.h>
 #include <glog/logging.h>
+#include <semaphore.h>
 
 #include <condition_variable>
 #include <mutex>

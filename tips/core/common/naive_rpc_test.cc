@@ -1,4 +1,5 @@
 #include "tips/core/common/naive_rpc.h"
+#include "tips/core/message/test0_generated.h"
 
 #include <mpi.h>
 
@@ -8,10 +9,11 @@
 namespace tips {
 
 using namespace std::chrono_literals;
+using namespace test::test_message0;
 
 void TestRpc() {
   RpcServer server;
-  RpcCallback callback = [&server](const RpcMsgHead& head, NaiveBuffer& buffer) {
+  RpcCallback callback = [&server](const RpcMsgHead& head, uint8_t* buffer) {
     std::this_thread::sleep_for(500ms);
     if (head.message_type == RpcMsgType::REQUEST) {
       LOG(INFO) << "server " << mpi_rank() << " get a request";
@@ -22,17 +24,22 @@ void TestRpc() {
       response_head.service   = head.service;
       response_head.request   = head.request;
 
-      int v;
-      std::string msg;
-      buffer >> v >> msg;
+      auto msg = flatbuffers::GetRoot<MessageRequest>(buffer);
 
-      CHECK_EQ(v, mpi_rank());
-      CHECK_EQ(msg, "hello node" + std::to_string(mpi_rank()));
-      LOG(INFO) << mpi_rank() << " get message from master: " << msg;
+      int v             = msg->v();
+      std::string greet = msg->greet()->str();
 
-      NaiveBuffer write_buf;
-      write_buf << mpi_rank();
-      server.SendResponse(response_head, write_buf);
+      CHECK_EQ(greet, "hello node" + std::to_string(v));
+      LOG(INFO) << mpi_rank() << " get message from master: " << greet;
+
+      {
+        FlatBufferBuilder builder;
+        auto msg = MessageResponseBuilder(builder);
+        msg.add_from_rank(mpi_rank());
+        builder.Finish(msg.Finish());
+
+        server.SendResponse(response_head, builder);
+      }
     }
 
     if (head.message_type == RpcMsgType::RESPONSE) {
@@ -48,20 +55,26 @@ void TestRpc() {
   mpi_barrier();
 
   if (mpi_rank() == 0) {
-    RpcCallback callback = [&server](RpcMsgHead head, NaiveBuffer& buf) {};
+    RpcCallback callback = [&server](RpcMsgHead head, uint8_t* buf) {};
 
     LOG(INFO) << "master send request...";
     {
-      NaiveBuffer writebuf;
-      writebuf << 1;
-      writebuf << std::string("hello node1");
-      server.SendRequest(1, service, writebuf, callback);
+      FlatBufferBuilder builder;
+      auto greet = builder.CreateString("hello node1");
+      auto msg   = MessageRequestBuilder(builder);
+      msg.add_greet(greet);
+      msg.add_v(1);
+      builder.Finish(msg.Finish());
+      server.SendRequest(1, service, builder, callback);
     }
     {
-      NaiveBuffer writebuf;
-      writebuf << 2;
-      writebuf << std::string("hello node2");
-      server.SendRequest(2, service, writebuf, callback);
+      FlatBufferBuilder builder;
+      auto greet = builder.CreateString("hello node2");
+      auto msg   = MessageRequestBuilder(builder);
+      msg.add_greet(greet);
+      msg.add_v(2);
+      builder.Finish(msg.Finish());
+      server.SendRequest(1, service, builder, callback);
     }
   }
 

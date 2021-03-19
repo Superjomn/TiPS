@@ -39,26 +39,26 @@ void RpcServer::StartRunLoop() {
       continue;
     }
 
-    NaiveBuffer in_buf;
-    in_buf.LoadFromMemory(msg.buffer(), msg.length());
+    std::vector<char> buffer;
+    buffer.resize(msg.length());
+
+    std::memcpy(buffer.data(), msg.buffer(), msg.length());
     msg.Release();
 
     // Parse the message content.
-    NaiveBuffer read_buf(in_buf.data(), in_buf.size());  // TODO(Superjomn) support zero copy
-    CHECK_EQ(read_buf.data(), read_buf.cursor());
-    RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(read_buf.cursor());
-    read_buf.Consume(sizeof(RpcMsgHead));
+    RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(buffer.data());
 
+    uint8_t *data = reinterpret_cast<uint8_t *>(buffer.data() + sizeof(RpcMsgHead));
     switch (head->message_type) {
       case RpcMsgType::REQUEST: {
         CHECK_EQ(head->server_id, mpi_rank());
-        head->service->callback()(*head, read_buf);
+        head->service->callback()(*head, data);
       } break;
 
       case RpcMsgType::RESPONSE: {
         CHECK_EQ(head->client_id, mpi_rank());
         VLOG(3) << "call response callback...";
-        head->request->callback()(*head, read_buf);
+        head->request->callback()(*head, data);
         VLOG(3) << "done call response callback...";
         CHECK(head->request);
         delete head->request;
@@ -72,28 +72,28 @@ void RpcServer::StartRunLoop() {
   }
 }
 
-std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const NaiveBuffer &buf) {
+std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const FlatBufferBuilder &buf) {
   CHECK_NE(head.server_id, -1);
   CHECK_NE(head.client_id, -1);
   CHECK(head.service);
   CHECK(head.request);
 
   size_t len = sizeof(head);
-  len += buf.size();
+  len += buf.GetSize();
 
   auto msg = std::make_unique<ZmqMessage>();
   msg->Resize(len);
   len = 0;
 
-  memcpy(msg->buffer() + len, &head, sizeof(head));
+  std::memcpy(msg->buffer() + len, &head, sizeof(head));
   len += sizeof(head);
 
-  memcpy(msg->buffer() + len, buf.data(), buf.size());
+  std::memcpy(msg->buffer() + len, buf.GetBufferPointer(), buf.GetSize());
 
   return msg;
 }
 
-void RpcServer::SendResponse(RpcMsgHead head, const NaiveBuffer &buf) {
+void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
   CHECK_EQ(head.server_id, mpi_rank());
   CHECK_GE(head.client_id, 0);
   CHECK_LT(head.client_id, mpi_size());
@@ -115,7 +115,7 @@ void RpcServer::SendResponse(RpcMsgHead head, const NaiveBuffer &buf) {
   sender_mutexs_[head.client_id].unlock();
 }
 
-void RpcServer::SendRequest(int server_id, RpcService *service, const NaiveBuffer &buf, RpcCallback callback) {
+void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBufferBuilder &buf, RpcCallback callback) {
   CHECK_GE(server_id, 0);
   CHECK_LT(server_id, mpi_size());
   CHECK(service);

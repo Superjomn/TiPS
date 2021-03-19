@@ -57,6 +57,9 @@ find_library(ZeroMQ_LIBRARY
         NAMES zmq
         PATHS ${PC_ZeroMQ_LIBRARY_DIRS})
 
+find_package(Threads REQUIRED)
+
+
 message(STATUS "Found ZMQ header: ${ZeroMQ_INCLUDE_DIR}")
 message(STATUS "Found ZMQ library: ${ZeroMQ_LIBRARY}")
 include_directories(${ZeroMQ_INCLUDE_DIR})
