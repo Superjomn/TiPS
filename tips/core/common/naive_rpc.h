@@ -109,14 +109,6 @@ class RpcServer {
    * @return address of the service instance.
    */
   RpcService* AddService(const std::string& type, RpcCallback callback);
-  /**
-   * Add a service with REQUEST and RESPONSE callback specified separately.
-   * @param type type representation for this service.
-   * @param request_callback the callback to handle the REQUEST message.
-   * @param response_callback the callback to handle the RESPONSE message.
-   * @return address of the service instance.
-   */
-  RpcService* AddService(const std::string& type, RpcCallback request_callback, RpcCallback response_callback);
 
   RpcService* LookupService(const std::string& type) const;
 
