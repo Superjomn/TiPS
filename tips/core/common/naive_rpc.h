@@ -3,6 +3,7 @@
 #include <mpi.h>
 #include <zmq.h>
 
+#include <flatbuffers/flatbuffers.h>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -17,6 +18,8 @@
 // This file implements a naive RPC.
 
 namespace tips {
+
+using flatbuffers::FlatBufferBuilder;  // NOLINT
 
 class RpcService;
 class RpcRequest;
@@ -44,7 +47,7 @@ struct RpcMsgHead {
   RpcMsgType message_type;
 };
 
-using RpcCallback = std::function<void(const RpcMsgHead&, NaiveBuffer&)>;
+using RpcCallback = std::function<void(const RpcMsgHead&, uint8_t*)>;
 
 /**
  * RpcService represents a service in the RPC framework. The callback will be invoked when a Request arrive.
@@ -119,9 +122,9 @@ class RpcServer {
   //! Finalize will force the server quit.
   void Finalize();
 
-  void SendRequest(int server_id, RpcService* service, const NaiveBuffer& buf, RpcCallback callback);
+  void SendRequest(int server_id, RpcService* service, const FlatBufferBuilder& buf, RpcCallback callback);
 
-  void SendResponse(RpcMsgHead head, const NaiveBuffer& buf);
+  void SendResponse(RpcMsgHead head, const FlatBufferBuilder& buf);
 
   ~RpcServer();
 
@@ -132,7 +135,7 @@ class RpcServer {
 
   void StartRunLoop();
 
-  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const NaiveBuffer& buf);
+  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const FlatBufferBuilder& buf);
 
  private:
   int num_connection_{1};

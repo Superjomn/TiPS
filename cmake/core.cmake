@@ -60,7 +60,7 @@ function(cc_test TARGET_NAME)
     cmake_parse_arguments(cc_test "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     add_executable(${TARGET_NAME} ${cc_test_SRCS})
     get_property(os_dependency_modules GLOBAL PROPERTY OS_DEPENDENCY_MODULES)
-    target_link_libraries(${TARGET_NAME} ${cc_test_DEPS} ${os_dependency_modules} tips_gtest_main gtest gflags glog)
+    target_link_libraries(${TARGET_NAME} ${cc_test_DEPS} ${os_dependency_modules} tips_gtest_main gtest gflags glog Threads::Threads)
     add_dependencies(${TARGET_NAME} ${cc_test_DEPS} gtest_main gtest gflags glog extern_gtest)
 
     add_test(NAME ${TARGET_NAME}
