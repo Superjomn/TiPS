@@ -3,15 +3,33 @@
 namespace tips {
 
 RpcServer::~RpcServer() {
-  for (auto *x : services_) {
-    delete x;
+  for (auto &item : services_) {
+    delete item.second;
   }
 }
 
-RpcService *RpcServer::AddService(RpcCallback callback) {
+RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback) {
   auto *new_service = new RpcService(std::move(callback));
-  services_.insert(new_service);
+  auto res          = services_.try_emplace(type, new_service);
+  CHECK(res.second) << "duplicate add service [" << type << "]";
   return new_service;
+}
+
+RpcService *RpcServer::AddService(const std::string &type,
+                                  RpcCallback request_callback,
+                                  RpcCallback response_callback) {
+  RpcCallback combined_callback = [request_callback, response_callback](const RpcMsgHead &head, uint8_t *buf) {
+    switch (head.message_type) {
+      case RpcMsgType::REQUEST:
+        request_callback(head, buf);
+        break;
+      case RpcMsgType::RESPONSE:
+        response_callback(head, buf);
+        break;
+    }
+  };
+
+  return AddService(type, combined_callback);
 }
 
 void RpcServer::StartRunLoop() {
@@ -110,9 +128,9 @@ void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
   VLOG(3) << "--------";
 
   auto msg = MakeMessage(head, buf);
-  sender_mutexs_[head.client_id].lock();
+  sender_mutexes_[head.client_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[head.client_id], 0), 0);
-  sender_mutexs_[head.client_id].unlock();
+  sender_mutexes_[head.client_id].unlock();
 }
 
 void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBufferBuilder &buf, RpcCallback callback) {
@@ -132,9 +150,9 @@ void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBuffer
 
   VLOG(4) << "to send request.service " << head.service;
   auto msg = MakeMessage(head, buf);
-  sender_mutexs_[server_id].lock();
+  sender_mutexes_[server_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[server_id], 0), 0);
-  sender_mutexs_[server_id].unlock();
+  sender_mutexes_[server_id].unlock();
 }
 
 void RpcServer::Finalize() {
@@ -143,9 +161,9 @@ void RpcServer::Finalize() {
 
   VLOG(3) << "tell all the threads to quit";
   for (int i = 0; i < num_listen_threads_; i++) {
-    sender_mutexs_[mpi_rank()].lock();
+    sender_mutexes_[mpi_rank()].lock();
     CHECK_GE(ignore_signal_call(zmq_msg_send, ZmqMessage().zmq_msg(), senders_[mpi_rank()], 0), 0);
-    sender_mutexs_[mpi_rank()].unlock();
+    sender_mutexes_[mpi_rank()].unlock();
   }
 
   for (int i = 0; i < num_listen_threads_; i++) {
@@ -185,7 +203,7 @@ void RpcServer::Initialize() {
     CHECK_EQ(zmq_setsockopt(senders_[i], ZMQ_SNDHWM, &v0, sizeof(int)), 0);
   }
   std::vector<std::mutex> tmp_muts(mpi_size());
-  sender_mutexs_.swap(tmp_muts);
+  sender_mutexes_.swap(tmp_muts);
 
   for (int conn = 0; conn < num_connection_; conn++) {
     std::vector<int> ports(mpi_size());
@@ -258,4 +276,10 @@ RpcService *RpcService::remote_service(size_t rank) {
   CHECK_LT(rank, remote_service_ptrs_.size());
   return remote_service_ptrs_[rank];
 }
+
+RpcService *RpcServer::LookupService(const std::string &type) const {
+  auto it = services_.find(type);
+  return it == services_.end() ? nullptr : it->second;
+}
+
 }  // namespace tips

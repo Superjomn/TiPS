@@ -48,7 +48,7 @@ void TestRpc() {
   };
 
   CHECK_EQ(mpi_size(), 3);
-  auto* service = server.AddService(callback);
+  auto* service = server.AddService("test", callback);
 
   LOG(INFO) << "to Intialize server";
   server.Initialize();
