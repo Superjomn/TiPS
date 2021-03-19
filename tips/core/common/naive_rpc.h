@@ -112,8 +112,6 @@ class RpcServer {
 
   RpcService* LookupService(const std::string& type) const;
 
-  static RpcServer& Global();
-
   //! Initialize the server run loop.
   void Initialize();
 
