@@ -41,6 +41,7 @@ include(cmake/external/gtest.cmake)
 include(cmake/external/openmpi.cmake)
 include(cmake/external/flatbuffers.cmake)
 include(cmake/external/boost.cmake)
+include(cmake/external/tensorflow.cmake)
 find_package(Threads REQUIRED)
 ## load in pkg-config support
 find_package(PkgConfig)
