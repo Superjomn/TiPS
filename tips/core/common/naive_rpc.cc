@@ -3,15 +3,33 @@
 namespace tips {
 
 RpcServer::~RpcServer() {
-  for (auto *x : services_) {
-    delete x;
+  for (auto &item : services_) {
+    delete item.second;
   }
 }
 
-RpcService *RpcServer::AddService(RpcCallback callback) {
+RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback) {
   auto *new_service = new RpcService(std::move(callback));
-  services_.insert(new_service);
+  auto res          = services_.try_emplace(type, new_service);
+  CHECK(res.second) << "duplicate add service [" << type << "]";
   return new_service;
+}
+
+RpcService *RpcServer::AddService(const std::string &type,
+                                  RpcCallback request_callback,
+                                  RpcCallback response_callback) {
+  RpcCallback combined_callback = [request_callback, response_callback](const RpcMsgHead &head, uint8_t *buf) {
+    switch (head.message_type) {
+      case RpcMsgType::REQUEST:
+        request_callback(head, buf);
+        break;
+      case RpcMsgType::RESPONSE:
+        response_callback(head, buf);
+        break;
+    }
+  };
+
+  return AddService(type, combined_callback);
 }
 
 void RpcServer::StartRunLoop() {
@@ -258,4 +276,10 @@ RpcService *RpcService::remote_service(size_t rank) {
   CHECK_LT(rank, remote_service_ptrs_.size());
   return remote_service_ptrs_[rank];
 }
+
+RpcService *RpcServer::LookupService(const std::string &type) const {
+  auto it = services_.find(type);
+  return it == services_.end() ? nullptr : it->second;
+}
+
 }  // namespace tips

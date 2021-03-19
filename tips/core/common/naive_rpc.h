@@ -23,11 +23,10 @@ using flatbuffers::FlatBufferBuilder;  // NOLINT
 
 class RpcService;
 class RpcRequest;
-class BinaryArchive {};
 
 #define RPC_MESSAGE_TYPE_FOREACH(op__) op__(REQUEST) op__(RESPONSE)
 
-enum class RpcMsgType : int {
+enum class RpcMsgType : uint8_t {
 #define __(ITEM) ITEM,
   RPC_MESSAGE_TYPE_FOREACH(__)
 #undef __
@@ -47,7 +46,7 @@ struct RpcMsgHead {
   RpcMsgType message_type;
 };
 
-using RpcCallback = std::function<void(const RpcMsgHead&, uint8_t*)>;
+using RpcCallback = std::function<void(const RpcMsgHead&, uint8_t* /*address of the flatbuffers data*/)>;
 
 /**
  * RpcService represents a service in the RPC framework. The callback will be invoked when a Request arrive.
@@ -96,17 +95,6 @@ class RpcRequest {
 
 /**
  * An PRC server.
- *
- * Usage:
- *
- * RpcServer rpc;
- * auto* service = rpc.AddService([](RpcMsgHead head, NaiveBuffer& buffer) {
- *   LOG(INFO) << "get a message";
- *   });
- *
- * NaiveBuffer buf;
- * buf << 1;
- * rpc.SendRequest(1, service, buf);
  */
 class RpcServer {
  public:
@@ -114,7 +102,23 @@ class RpcServer {
   RpcServer(int num_connection, int num_listen_threads, int zmq_num_threads)
       : num_connection_(num_connection), num_listen_threads_(num_listen_threads), zmq_num_threads_(zmq_num_threads) {}
 
-  RpcService* AddService(RpcCallback callback);
+  /**
+   * Add a service for both REQUEST and RESPONSE message.
+   * @param type type representation for this service.
+   * @param callback the callback.
+   * @return address of the service instance.
+   */
+  RpcService* AddService(const std::string& type, RpcCallback callback);
+  /**
+   * Add a service with REQUEST and RESPONSE callback specified separately.
+   * @param type type representation for this service.
+   * @param request_callback the callback to handle the REQUEST message.
+   * @param response_callback the callback to handle the RESPONSE message.
+   * @return address of the service instance.
+   */
+  RpcService* AddService(const std::string& type, RpcCallback request_callback, RpcCallback response_callback);
+
+  RpcService* LookupService(const std::string& type) const;
 
   //! Initialize the server run loop.
   void Initialize();
@@ -154,7 +158,7 @@ class RpcServer {
 
   std::vector<std::thread> listen_threads_;
 
-  std::unordered_set<RpcService*> services_;
+  std::unordered_map<std::string, RpcService*> services_;
 };
 
 }  // namespace tips
