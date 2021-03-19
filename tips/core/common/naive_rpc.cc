@@ -15,23 +15,6 @@ RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback)
   return new_service;
 }
 
-RpcService *RpcServer::AddService(const std::string &type,
-                                  RpcCallback request_callback,
-                                  RpcCallback response_callback) {
-  RpcCallback combined_callback = [request_callback, response_callback](const RpcMsgHead &head, uint8_t *buf) {
-    switch (head.message_type) {
-      case RpcMsgType::REQUEST:
-        request_callback(head, buf);
-        break;
-      case RpcMsgType::RESPONSE:
-        response_callback(head, buf);
-        break;
-    }
-  };
-
-  return AddService(type, combined_callback);
-}
-
 void RpcServer::StartRunLoop() {
   while (true) {
     ZmqMessage msg;
