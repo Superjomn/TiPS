@@ -110,9 +110,9 @@ void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
   VLOG(3) << "--------";
 
   auto msg = MakeMessage(head, buf);
-  sender_mutexs_[head.client_id].lock();
+  sender_mutexes_[head.client_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[head.client_id], 0), 0);
-  sender_mutexs_[head.client_id].unlock();
+  sender_mutexes_[head.client_id].unlock();
 }
 
 void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBufferBuilder &buf, RpcCallback callback) {
@@ -132,9 +132,9 @@ void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBuffer
 
   VLOG(4) << "to send request.service " << head.service;
   auto msg = MakeMessage(head, buf);
-  sender_mutexs_[server_id].lock();
+  sender_mutexes_[server_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[server_id], 0), 0);
-  sender_mutexs_[server_id].unlock();
+  sender_mutexes_[server_id].unlock();
 }
 
 void RpcServer::Finalize() {
@@ -143,9 +143,9 @@ void RpcServer::Finalize() {
 
   VLOG(3) << "tell all the threads to quit";
   for (int i = 0; i < num_listen_threads_; i++) {
-    sender_mutexs_[mpi_rank()].lock();
+    sender_mutexes_[mpi_rank()].lock();
     CHECK_GE(ignore_signal_call(zmq_msg_send, ZmqMessage().zmq_msg(), senders_[mpi_rank()], 0), 0);
-    sender_mutexs_[mpi_rank()].unlock();
+    sender_mutexes_[mpi_rank()].unlock();
   }
 
   for (int i = 0; i < num_listen_threads_; i++) {
@@ -185,7 +185,7 @@ void RpcServer::Initialize() {
     CHECK_EQ(zmq_setsockopt(senders_[i], ZMQ_SNDHWM, &v0, sizeof(int)), 0);
   }
   std::vector<std::mutex> tmp_muts(mpi_size());
-  sender_mutexs_.swap(tmp_muts);
+  sender_mutexes_.swap(tmp_muts);
 
   for (int conn = 0; conn < num_connection_; conn++) {
     std::vector<int> ports(mpi_size());

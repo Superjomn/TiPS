@@ -150,7 +150,7 @@ class RpcServer {
 
   //! Senders' smq sockets.
   std::vector<void*> senders_;
-  std::vector<std::mutex> sender_mutexs_;
+  std::vector<std::mutex> sender_mutexes_;
 
   std::vector<std::thread> listen_threads_;
 
