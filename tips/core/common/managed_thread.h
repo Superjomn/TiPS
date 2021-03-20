@@ -14,6 +14,12 @@ class alignas(64) ManagedThread {
     thread_ = std::thread([this]() { RunThread(); });
   }
 
+  void Terminate() {
+    active_       = false;
+    to_terminate_ = true;
+    sem_start_.Post();
+  }
+
   ~ManagedThread() {
     CHECK(!active_);
     to_terminate_ = true;

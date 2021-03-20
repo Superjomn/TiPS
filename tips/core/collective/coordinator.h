@@ -1,13 +1,12 @@
 #pragma once
 
-#include <tensorflow/core/framework/op.h>
-#include <tensorflow/core/framework/op_kernel.h>
-#include <tensorflow/core/framework/shape_inference.h>
-#include <tensorflow/stream_executor/lib/statusor.h>
+#include <queue>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
 
+#include "tips/core/collective/utils.h"
+#include "tips/core/common/managed_thread.h"
 #include "tips/core/common/naive_rpc.h"
 #include "tips/core/message/collective_messages_generated.h"
 
@@ -18,8 +17,7 @@
 namespace tips {
 namespace collective {
 
-template <typename T>
-using StatusOr = stream_executor::port::StatusOr<T>;
+using CommunicationDoneCallback = std::function<void(StatusOr<tensorflow::Tensor>)>;
 
 /**
  * A wrapper to copy the RequestMessage flatbuffers object. It allocate and copy the data itself.
@@ -28,6 +26,7 @@ template <typename FBS_T>
 struct FBS_TypeBufferOwned {
   FBS_TypeBufferOwned() = delete;
   FBS_TypeBufferOwned(const FBS_TypeBufferOwned& other) { Copy(other.buffer_, other.len_); }
+  FBS_TypeBufferOwned(flatbuffers::DetachedBuffer&& buffer) : detached_buffer_(std::move(buffer)) {}
 
   /**
    * construct.
@@ -44,14 +43,19 @@ struct FBS_TypeBufferOwned {
     }
   }
 
-  FBS_TypeBufferOwned(FBS_TypeBufferOwned&& other) : buffer_(other.buffer_), len_(other.len_) {
+  FBS_TypeBufferOwned(FBS_TypeBufferOwned&& other)
+      : buffer_(other.buffer_), len_(other.len_), detached_buffer_(std::move(other.detached_buffer_)) {
     other.buffer_ = nullptr;
     other.len_    = 0;
   }
 
   const FBS_T& msg() const {
-    CHECK(buffer_);
-    return *flatbuffers::GetRoot<collective::RequestMessage>(buffer_);
+    CHECK(buffer_ || detached_buffer_.data());
+    if (buffer_) {
+      return *flatbuffers::GetRoot<FBS_T>(buffer_);
+    } else {
+      return *flatbuffers::GetRoot<FBS_T>(detached_buffer_.data());
+    }
   }
 
   ~FBS_TypeBufferOwned() {
@@ -63,10 +67,18 @@ struct FBS_TypeBufferOwned {
 
   uint8_t* buffer_{};
   size_t len_{};
+
+  flatbuffers::DetachedBuffer detached_buffer_;
 };
 
 using RequestMessage  = FBS_TypeBufferOwned<message::RequestMessage>;
 using ResponseMessage = FBS_TypeBufferOwned<message::ResponseMessage>;
+
+RequestMessage CreateRequestMessage(int request_rank,
+                                    message::RequestType request_type,
+                                    message::DataType data_type,
+                                    const std::string& tensor_name,
+                                    const std::vector<int64_t>& tensor_shape);
 
 /**
  * A wrapper to hold the RequestMessage flatbuffers object. It doesn't hold the data, leave the underlying buffer
@@ -84,12 +96,65 @@ struct RequestMessageCloned {
   const uint8_t* buffer_;
 };
 
+struct OpRecord {
+  // The rank performing this piece of op.
+  int rank{-1};
+
+  // The name of the op/tensor to be reduced.
+  std::string name;
+
+  OpKernelContext* op_context{};
+
+  message::DataType dtype;
+
+  // The input tensor.
+  const Tensor* in_tensor;
+
+  // Allgather: vector of per-rank first-dimension sizes.
+  std::vector<int64_t> sizes_vec;
+
+  // The output tensor.
+  Tensor* out_tensor;
+
+  // The callback to call after the op has completed.
+  CommunicationDoneCallback callback;
+};
+
 /**
  * Table for storing Tensor metadata on rank zero. This is used for error checking and size calculation, as well as
  * determining when a reduction is ready to be done (when all nodes are ready to do it).
  */
-using MessageTable       = std::unordered_map<std::string, std::vector<RequestMessage>>;
-using MessageTableCloned = std::unordered_map<std::string, std::vector<RequestMessageCloned>>;
+using MessageTable = std::unordered_map<std::string, std::vector<RequestMessage>>;
+
+/**
+ * Table storing Tensors to be reduced, keyed by unique name.
+ * This table contains everything necessary to do the reduction.
+ */
+using TensorTable = std::unordered_map<std::string, OpRecord>;
+
+struct CollectiveState {
+  //! A lock to guard all the shared resource.
+  std::mutex mu;
+
+  TensorTable tensor_table;
+
+  std::queue<RequestMessage> message_queue;
+
+  ManagedThread background_thread;
+
+  bool shut_down = false;
+
+  //! Only exists on the coordinator node(rank = 0).
+  std::unique_ptr<MessageTable> message_table;
+
+  //! Singleton.
+  static CollectiveState& Global() {
+    static CollectiveState x;
+    return x;
+  }
+
+  ~CollectiveState() { background_thread.Terminate(); }
+};
 
 /**
  * Store the RequestMessage for a name and return whether the total count of RequestMessages for that tensor is now
@@ -97,39 +162,22 @@ using MessageTableCloned = std::unordered_map<std::string, std::vector<RequestMe
  */
 bool IncreTensorCount(MessageTable& table, RequestMessage&& msg, int mpi_size);
 
-ResponseMessage ConstructResponseMessage(const MessageTable& table, const std::string& name) {
-  auto it = table.find(name);
-  CHECK(it != table.end()) << "message table doesn't have item called " << name;
+ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string& name);
 
-  const auto& requests = it->second;
-  CHECK_GT(requests.size(), 0);
-
-  bool error = false;
-  std::stringstream error_stream;
-
-  // Check that all data types are identical
-  auto data_type = requests[0].msg().tensor_type();
-  for (int i = 1; i < requests.size() && !error; i++) {
-    auto type = requests[i].msg().tensor_type();
-    if (data_type != type) {
-      error = true;
-      error_stream << "Mismatch data types found: " << data_type << " vs " << type << ".";
-    }
+// This function adds the op's record into the local op queue and sends a message to the coordinator indicating that
+// this rank is ready to begin. The background thread will handle this message.
+void EnqueueTensorCollective(const OpRecord& record, message::RequestType request_type) {
+  const Tensor* in_tensor = record.in_tensor;
+  std::vector<int64_t> shape;
+  for (int i = 0; i < in_tensor->shape().dims(); i++) {
+    shape.push_back(in_tensor->shape().dim_size(i));
   }
 
-  // Check that all requested operations are the same.
-  auto operation_type = requests[0].msg().request_type();
-  for (int i = 1; i < requests.size() && !error; i++) {
-    auto type = requests[0].msg().request_type();
-    if (operation_type != type) {
-      error = true;
-      error_stream << "Mismatched operations found: " << operation_type << " vs " << type << ".";
-    }
-  }
+  auto message = CreateRequestMessage(record.rank, request_type, record.dtype, record.name, shape);
 
-  // If we are doing an allreduce, check that all the tensor shape are identical.
-
-  // TODO
+  std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
+  CollectiveState::Global().tensor_table.emplace(record.name, record);
+  CollectiveState::Global().message_queue.push(std::move(message));
 }
 
 template <typename FBS_T>

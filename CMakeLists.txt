@@ -71,5 +71,5 @@ set(core_src CACHE INTERNAL "" FORCE)
 
 add_subdirectory(tips)
 
-cc_library(tipscore SRCS ${core_src} DEPS glog boost)
+cc_library(tipscore SRCS ${core_src} DEPS glog boost fbs_headers_dummy)
 target_link_libraries(tipscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY} ${Tensorflow_LIBRARIES} fbs_headers_dummy)

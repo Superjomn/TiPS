@@ -1,6 +1,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+
 #include <boost/timer.hpp>
+
 #include "tips/core/common/naive_buffer.h"
 #include "tips/core/message/test0_generated.h"
 
