@@ -118,6 +118,11 @@ class RpcServer {
   //! Finalize will force the server quit.
   void Finalize();
 
+  //! Tell whether the server is initialized.
+  bool initialized() const { return initialized_; }
+  //! Tell whether the server is finialized.
+  bool finalized() const { return finalized_; }
+
   void SendRequest(int server_id, RpcService* service, const FlatBufferBuilder& buf, RpcCallback callback);
 
   void SendResponse(RpcMsgHead head, const FlatBufferBuilder& buf);
@@ -154,6 +159,9 @@ class RpcServer {
   std::vector<std::thread> listen_threads_;
 
   std::unordered_map<std::string, RpcService*> services_;
+
+  bool initialized_{};
+  bool finalized_{};
 };
 
 }  // namespace tips

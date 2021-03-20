@@ -164,21 +164,62 @@ bool IncreTensorCount(MessageTable& table, RequestMessage&& msg, int mpi_size);
 
 ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string& name);
 
-// This function adds the op's record into the local op queue and sends a message to the coordinator indicating that
-// this rank is ready to begin. The background thread will handle this message.
-void EnqueueTensorCollective(const OpRecord& record, message::RequestType request_type) {
-  const Tensor* in_tensor = record.in_tensor;
-  std::vector<int64_t> shape;
-  for (int i = 0; i < in_tensor->shape().dims(); i++) {
-    shape.push_back(in_tensor->shape().dim_size(i));
+/**
+ * Process an ResponseMessage by doing a reduction, a gather or raising an error.
+ */
+void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) {
+  OpRecord record;
+  {
+    std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
+
+    auto name = response.msg().tensor_name()->str();
+    auto it   = tensor_table.find(name);
+    CHECK(it != tensor_table.end());
+
+    CHECK(response.msg().response_type() == message::ResponseType_ALLREDUCE ||
+          response.msg().response_type() == message::ResponseType_ALLGATHER ||
+          response.msg().response_type() == message::ResponseType_ERROR);
+
+    record = it->second;
+
+    tensor_table.erase(it);
   }
 
-  auto message = CreateRequestMessage(record.rank, request_type, record.dtype, record.name, shape);
+  Status status;
+  auto dtype = record.in_tensor->dtype();
 
-  std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
-  CollectiveState::Global().tensor_table.emplace(record.name, record);
-  CollectiveState::Global().message_queue.push(std::move(message));
+  if (response.msg().response_type() == message::ResponseType_ALLREDUCE) {
+    switch (dtype) {
+      case message::DataType_TF_INT32:
+        status = AllreduceCpu<int32_t>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
+        break;
+      case message::DataType_TF_FLOAT32:
+        status = AllreduceCpu<float>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
+        break;
+    }
+  } else if (response.msg().response_type() == message::ResponseType_ALLGATHER) {
+    switch (dtype) {
+      case message::DataType_TF_INT32:
+        status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
+        break;
+      case message::DataType_TF_FLOAT32:
+        status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
+        break;
+    }
+  } else if (response.msg().response_type() == message::ResponseType_ERROR) {
+    status = tensorflow::errors::FailedPrecondition(response.msg().error_message()->str());
+  }
+
+  if (status.ok()) {
+    record.callback(StatusOr<Tensor>(*record.out_tensor));
+  } else {
+    record.callback(StatusOr<Tensor>(status));
+  }
 }
+
+// This function adds the op's record into the local op queue and sends a message to the coordinator indicating that
+// this rank is ready to begin. The background thread will handle this message.
+void EnqueueTensorCollective(const OpRecord& record, message::RequestType request_type);
 
 template <typename FBS_T>
 void FBS_TypeBufferOwned<FBS_T>::Copy(const uint8_t* buffer, size_t len) {

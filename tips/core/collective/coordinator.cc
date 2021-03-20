@@ -156,5 +156,19 @@ RequestMessage CreateRequestMessage(int request_rank,
   return RequestMessage(builder.Release());
 }
 
+void EnqueueTensorCollective(const OpRecord& record, message::RequestType request_type) {
+  const Tensor* in_tensor = record.in_tensor;
+  std::vector<int64_t> shape;
+  for (int i = 0; i < in_tensor->shape().dims(); i++) {
+    shape.push_back(in_tensor->shape().dim_size(i));
+  }
+
+  auto message = CreateRequestMessage(record.rank, request_type, record.dtype, record.name, shape);
+
+  std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
+  CollectiveState::Global().tensor_table.emplace(record.name, record);
+  CollectiveState::Global().message_queue.push(std::move(message));
+}
+
 }  // namespace collective
 }  // namespace tips

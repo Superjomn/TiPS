@@ -95,6 +95,9 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const
 }
 
 void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
+  CHECK(initialized_) << "Server should be initialized first";
+  CHECK(!finalized_) << "Server is finailized";
+
   CHECK_EQ(head.server_id, mpi_rank());
   CHECK_GE(head.client_id, 0);
   CHECK_LT(head.client_id, mpi_size());
@@ -117,6 +120,9 @@ void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
 }
 
 void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBufferBuilder &buf, RpcCallback callback) {
+  CHECK(initialized_) << "Server should be initialized first";
+  CHECK(!finalized_) << "Server is finailized";
+
   CHECK_GE(server_id, 0);
   CHECK_LT(server_id, mpi_size());
   CHECK(service);
@@ -139,6 +145,12 @@ void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBuffer
 }
 
 void RpcServer::Finalize() {
+  CHECK(initialized_);
+  CHECK(!finalized_) << "Duplicate finalization found";
+
+  // Update state.
+  finalized_ = true;
+
   VLOG(1) << "#### to finalize";
   CHECK(zmq_ctx_);
 
@@ -171,6 +183,9 @@ void RpcServer::Finalize() {
 }
 
 void RpcServer::Initialize() {
+  // Update state.
+  initialized_ = true;
+
   MPI_Barrier(mpi_comm());
   CHECK(!zmq_ctx_) << "Duplicate initialization found";
   CHECK(zmq_ctx_ = zmq_ctx_new());

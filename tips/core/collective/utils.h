@@ -31,16 +31,26 @@ MPI_Op CollectiveOpKindToMpiOp(CollectiveOpKind op);
  */
 template <typename dtype>
 Status AllreduceCpu(const Tensor* input, Tensor* output, CollectiveOpKind op) {
-  dtype* buffer = reinterpret_cast<dtype*>(input->tensor_data().data());
+  const dtype* buffer = reinterpret_cast<const dtype*>(input->tensor_data().data());
   CHECK(output->shape() == input->shape());
 
   // TODO(Superjomn) try the inplace way.
   ZCHECK(MPI_Allreduce(buffer,
                        output->data(),
                        input->tensor_data().size(),
-                       mpi_type_trait<dtype>(),
+                       mpi_type_trait<dtype>::type(),
                        CollectiveOpKindToMpiOp(op),
                        mpi_comm()));
+}
+
+// TODO(Superjomn) Replace with allgatherv ?
+template <typename dtype>
+Status AllgatherCpu(const Tensor* input, Tensor* output) {
+  const dtype* buffer = reinterpret_cast<const dtype*>(input->tensor_data().data());
+  // TODO(Supejomn) do shape check.
+
+  // TODO(Superjomn) try the inplace way.
+  ZCHECK(MPI_Allgather(buffer, input->tensor_data().size(), mpi_type_trait<dtype>::type(), output->data(), mpi_comm()));
 }
 
 template <typename dtype>
