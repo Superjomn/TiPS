@@ -4,7 +4,7 @@ namespace tips {
 
 RpcServer::~RpcServer() {
   for (auto &item : services_) {
-    delete item.second;
+    if (item.second) delete item.second;
   }
 }
 
@@ -163,6 +163,11 @@ void RpcServer::Finalize() {
   ZCHECK(zmq_ctx_destroy(zmq_ctx_));
 
   mpi_barrier();
+
+  for (auto &item : services_) {
+    delete item.second;
+    item.second = nullptr;
+  }
 }
 
 void RpcServer::Initialize() {
@@ -263,6 +268,12 @@ RpcService *RpcService::remote_service(size_t rank) {
 RpcService *RpcServer::LookupService(const std::string &type) const {
   auto it = services_.find(type);
   return it == services_.end() ? nullptr : it->second;
+}
+
+RpcServer &RpcServer::Global() {
+  // NOTE One should manually call RpcServer::Initialize and RpcServer::Finalize before and after using this singleton.
+  static RpcServer x;
+  return x;
 }
 
 }  // namespace tips

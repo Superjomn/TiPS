@@ -1,9 +1,9 @@
 #pragma once
+#include <flatbuffers/flatbuffers.h>
 #include <glog/logging.h>
 #include <mpi.h>
 #include <zmq.h>
 
-#include <flatbuffers/flatbuffers.h>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -121,6 +121,9 @@ class RpcServer {
   void SendRequest(int server_id, RpcService* service, const FlatBufferBuilder& buf, RpcCallback callback);
 
   void SendResponse(RpcMsgHead head, const FlatBufferBuilder& buf);
+
+  //! Singleton for global usage.
+  static RpcServer& Global();
 
   ~RpcServer();
 
