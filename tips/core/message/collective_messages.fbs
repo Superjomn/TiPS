@@ -23,12 +23,12 @@ table RequestMessage {
   request_type:     RequestType;
   tensor_type:      DataType;
   tensor_name:      string;
-  tensor_shape:     [int];
+  tensor_shape:     [int64];
 }
 
 table ResponseMessage {
   response_type: ResponseType;
   tensor_name: string;
   error_message: string;
-  tensor_sizes: [int];
+  tensor_sizes: [int64];
 }
