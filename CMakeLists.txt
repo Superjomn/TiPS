@@ -4,7 +4,7 @@ project(tips)
 # for IDE
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 
 option(WITH_TESTING         "Compile with Unittests"          ON)
 option(WITH_CUDA            "Compile with CUDA support"       OFF)
