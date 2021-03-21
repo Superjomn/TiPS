@@ -10,8 +10,8 @@ RpcServer::~RpcServer() {
 
 RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback) {
   auto *new_service = new RpcService(std::move(callback));
-  auto res          = services_.try_emplace(type, new_service);
-  CHECK(res.second) << "duplicate add service [" << type << "]";
+  CHECK(!services_.count(type)) << "duplicate add service [" << type << "]";
+  services_.emplace(type, new_service);
   return new_service;
 }
 

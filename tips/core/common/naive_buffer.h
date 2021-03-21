@@ -15,6 +15,7 @@
 // This file belongs to Paddle-Lite project, all the rights reserved for the authors.
 
 #pragma once
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -474,7 +475,7 @@ CustomBuilder* StructBuilder::New(const std::string& name) {
   return static_cast<type*>(field_builders_.GetMutable(name).get());
 }
 
-template <typename T, typename = typename std::enable_if_t<std::is_pod_v<T>>>
+template <typename T, typename = typename std::enable_if<std::is_pod<T>::value>::type>
 NaiveBuffer& operator<<(NaiveBuffer& os, const T& v) {
   PrimaryBuilder<T> builder(&os);
   builder.set(v);
@@ -482,7 +483,7 @@ NaiveBuffer& operator<<(NaiveBuffer& os, const T& v) {
   return os;
 }
 
-template <typename T, typename = typename std::enable_if_t<std::is_pod_v<T>>>
+template <typename T, typename = typename std::enable_if<std::is_pod<T>::value>::type>
 NaiveBuffer& operator>>(NaiveBuffer& os, T& v) {
   PrimaryBuilder<T> builder(&os);
   builder.Load();
@@ -502,7 +503,7 @@ static NaiveBuffer& operator>>(NaiveBuffer& os, std::string& v) {
   builder.Load();
 
   v.resize(builder.size());
-  memcpy(v.data(), builder.data(), builder.size());
+  memcpy(&v[0], builder.data(), builder.size());
   return os;
 }
 

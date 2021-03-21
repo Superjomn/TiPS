@@ -50,7 +50,13 @@ Status AllgatherCpu(const Tensor* input, Tensor* output) {
   // TODO(Supejomn) do shape check.
 
   // TODO(Superjomn) try the inplace way.
-  ZCHECK(MPI_Allgather(buffer, input->tensor_data().size(), mpi_type_trait<dtype>::type(), output->data(), mpi_comm()));
+  ZCHECK(MPI_Allgather(buffer,
+                       input->tensor_data().size(),
+                       mpi_type_trait<dtype>::type(),
+                       output->data(),
+                       input->tensor_data().size(),
+                       mpi_type_trait<dtype>::type(),
+                       mpi_comm()));
 }
 
 template <typename dtype>
