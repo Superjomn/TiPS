@@ -38,7 +38,7 @@ void TestRpc(RpcServer& server) {
         msg.add_from_rank(mpi_rank());
         builder.Finish(msg.Finish());
 
-        server.SendResponse(response_head, builder);
+        server.SendResponse(response_head, builder.GetBufferPointer(), builder.GetSize());
       }
     }
 
@@ -65,7 +65,7 @@ void TestRpc(RpcServer& server) {
       msg.add_greet(greet);
       msg.add_v(1);
       builder.Finish(msg.Finish());
-      server.SendRequest(1, service, builder, callback);
+      server.SendRequest(1, service, builder.GetBufferPointer(), builder.GetSize(), callback);
     }
     {
       FlatBufferBuilder builder;
@@ -74,7 +74,7 @@ void TestRpc(RpcServer& server) {
       msg.add_greet(greet);
       msg.add_v(2);
       builder.Finish(msg.Finish());
-      server.SendRequest(1, service, builder, callback);
+      server.SendRequest(1, service, builder.GetBufferPointer(), builder.GetSize(), callback);
     }
   }
 

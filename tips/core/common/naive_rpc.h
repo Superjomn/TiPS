@@ -123,9 +123,23 @@ class RpcServer {
   //! Tell whether the server is finialized.
   bool finalized() const { return finalized_; }
 
-  void SendRequest(int server_id, RpcService* service, const FlatBufferBuilder& buf, RpcCallback callback);
+  /**
+   * Send a request message.
+   * @param server_id the id of the target server.
+   * @param service address of the service instance.
+   * @param buf the buffer of the message.
+   * @param len length of the buffer.
+   * @param callback the callback to trigger after response arrived.
+   */
+  void SendRequest(int server_id, RpcService* service, const uint8_t* buf, size_t len, RpcCallback callback);
 
-  void SendResponse(RpcMsgHead head, const FlatBufferBuilder& buf);
+  /**
+   * Send a response message.
+   * @param head the message head.
+   * @param buf the buffer of the message to send.
+   * @param len the length of the buffer.
+   */
+  void SendResponse(RpcMsgHead head, const uint8_t* buf, size_t len);
 
   //! Singleton for global usage.
   static RpcServer& Global();
@@ -139,7 +153,7 @@ class RpcServer {
 
   void StartRunLoop();
 
-  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const FlatBufferBuilder& buf);
+  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const uint8_t* buf, size_t len);
 
  private:
   int num_connection_{1};

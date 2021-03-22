@@ -73,14 +73,14 @@ void RpcServer::StartRunLoop() {
   }
 }
 
-std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const FlatBufferBuilder &buf) {
+std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const uint8_t *buf, size_t size) {
   CHECK_NE(head.server_id, -1);
   CHECK_NE(head.client_id, -1);
   CHECK(head.service);
   CHECK(head.request);
 
   size_t len = sizeof(head);
-  len += buf.GetSize();
+  len += size;
 
   auto msg = std::make_unique<ZmqMessage>();
   msg->Resize(len);
@@ -89,12 +89,12 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const
   std::memcpy(msg->buffer() + len, &head, sizeof(head));
   len += sizeof(head);
 
-  std::memcpy(msg->buffer() + len, buf.GetBufferPointer(), buf.GetSize());
+  std::memcpy(msg->buffer() + len, buf, size);
 
   return msg;
 }
 
-void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
+void RpcServer::SendResponse(RpcMsgHead head, const uint8_t *buf, size_t len) {
   CHECK(initialized_) << "Server should be initialized first";
   CHECK(!finalized_) << "Server is finailized";
 
@@ -113,13 +113,13 @@ void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
   VLOG(3) << "- service " << head.service;
   VLOG(3) << "--------";
 
-  auto msg = MakeMessage(head, buf);
+  auto msg = MakeMessage(head, buf, len);
   sender_mutexes_[head.client_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[head.client_id], 0), 0);
   sender_mutexes_[head.client_id].unlock();
 }
 
-void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBufferBuilder &buf, RpcCallback callback) {
+void RpcServer::SendRequest(int server_id, RpcService *service, const uint8_t *buf, size_t len, RpcCallback callback) {
   CHECK(initialized_) << "Server should be initialized first";
   CHECK(!finalized_) << "Server is finailized";
 
@@ -138,7 +138,7 @@ void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBuffer
   head.message_type = RpcMsgType::REQUEST;
 
   VLOG(4) << "to send request.service " << head.service;
-  auto msg = MakeMessage(head, buf);
+  auto msg = MakeMessage(head, buf, len);
   sender_mutexes_[server_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[server_id], 0), 0);
   sender_mutexes_[server_id].unlock();
