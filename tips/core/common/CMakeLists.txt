@@ -15,4 +15,4 @@ cc_test(test_channel SRCS channel_test.cc DEPS tipscore)
 target_link_libraries(test_channel ${Tensorflow_LIBRARIES})
 
 cc_binary(test_naive_rpc SRCS naive_rpc_test.cc DEPS tipscore)
-add_test(NAME test_naive_rpc_main COMMAND mpirun -np 3 test_naive_rpc)
+add_test(NAME test_naive_rpc_main COMMAND mpirun -np 3 --allow-run-as-root test_naive_rpc)

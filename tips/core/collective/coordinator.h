@@ -27,7 +27,29 @@ template <typename FBS_T>
 struct FBS_TypeBufferOwned {
   FBS_TypeBufferOwned() = default;
   FBS_TypeBufferOwned(const FBS_TypeBufferOwned& other) { Copy(other.buffer_, other.len_); }
-  FBS_TypeBufferOwned(flatbuffers::DetachedBuffer&& buffer) : detached_buffer_(std::move(buffer)) {}
+  FBS_TypeBufferOwned(flatbuffers::DetachedBuffer&& buffer)
+      : detached_buffer_(new flatbuffers::DetachedBuffer(std::move(buffer))) {}
+  FBS_TypeBufferOwned& operator=(FBS_TypeBufferOwned&& other) {
+    // Clear this.
+    if (buffer_) {
+      delete buffer_;
+    }
+    detached_buffer_.reset(nullptr);
+
+    // Set the new data
+    if (other.buffer_) {
+      buffer_       = other.buffer_;
+      len_          = other.len_;
+      other.buffer_ = nullptr;
+      other.len_    = 0;
+    }
+
+    if (other.detached_buffer_) {
+      detached_buffer_ = std::move(other.detached_buffer_);
+    }
+
+    return *this;
+  }
 
   /**
    * construct.
@@ -51,11 +73,11 @@ struct FBS_TypeBufferOwned {
   }
 
   const FBS_T& msg() const {
-    CHECK(buffer_ || detached_buffer_.data());
+    CHECK(buffer_ || detached_buffer_);
     if (buffer_) {
       return *flatbuffers::GetRoot<FBS_T>(buffer_);
     } else {
-      return *flatbuffers::GetRoot<FBS_T>(detached_buffer_.data());
+      return *flatbuffers::GetRoot<FBS_T>(detached_buffer_->data());
     }
   }
 
@@ -71,7 +93,7 @@ struct FBS_TypeBufferOwned {
   uint8_t* buffer_{};
   size_t len_{};
 
-  flatbuffers::DetachedBuffer detached_buffer_;
+  std::unique_ptr<flatbuffers::DetachedBuffer> detached_buffer_;
 };
 
 using RequestMessage  = FBS_TypeBufferOwned<message::RequestMessage>;
