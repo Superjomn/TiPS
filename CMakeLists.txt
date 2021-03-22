@@ -34,7 +34,7 @@ include_directories(${CMAKE_BINARY_DIR})
 
 set(THIRD_PARTY_PATH ${CMAKE_BINARY_DIR}/thirds)
 
-include(cmake/external/pybind11.cmake)
+#include(cmake/external/pybind11.cmake)
 include(cmake/external/gflags.cmake)
 include(cmake/external/glog.cmake)
 include(cmake/external/gtest.cmake)
