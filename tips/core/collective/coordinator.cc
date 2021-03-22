@@ -167,7 +167,57 @@ void EnqueueTensorCollective(const OpRecord& record, message::RequestType reques
 
   std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
   CollectiveState::Global().tensor_table.emplace(record.name, record);
-  CollectiveState::Global().message_queue.push(std::move(message));
+  CollectiveState::Global().message_queue->WriteMove(std::move(message));
+}
+
+void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) {
+  OpRecord record;
+  {
+    std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
+
+    auto name = response.msg().tensor_name()->str();
+    auto it   = tensor_table.find(name);
+    CHECK(it != tensor_table.end());
+
+    CHECK(response.msg().response_type() == message::ResponseType_ALLREDUCE ||
+          response.msg().response_type() == message::ResponseType_ALLGATHER ||
+          response.msg().response_type() == message::ResponseType_ERROR);
+
+    record = it->second;
+
+    tensor_table.erase(it);
+  }
+
+  Status status;
+  auto dtype = record.in_tensor->dtype();
+
+  if (response.msg().response_type() == message::ResponseType_ALLREDUCE) {
+    switch (dtype) {
+      case message::DataType_TF_INT32:
+        status = AllreduceCpu<int32_t>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
+        break;
+      case message::DataType_TF_FLOAT32:
+        status = AllreduceCpu<float>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
+        break;
+    }
+  } else if (response.msg().response_type() == message::ResponseType_ALLGATHER) {
+    switch (dtype) {
+      case message::DataType_TF_INT32:
+        status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
+        break;
+      case message::DataType_TF_FLOAT32:
+        status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
+        break;
+    }
+  } else if (response.msg().response_type() == message::ResponseType_ERROR) {
+    status = tensorflow::errors::FailedPrecondition(response.msg().error_message()->str());
+  }
+
+  if (status.ok()) {
+    record.callback(StatusOr<Tensor>(*record.out_tensor));
+  } else {
+    record.callback(StatusOr<Tensor>(status));
+  }
 }
 
 }  // namespace collective

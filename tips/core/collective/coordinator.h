@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "tips/core/collective/utils.h"
+#include "tips/core/common/channel.h"
 #include "tips/core/common/managed_thread.h"
 #include "tips/core/common/naive_rpc.h"
 #include "tips/core/message/collective_messages_generated.h"
@@ -24,7 +25,7 @@ using CommunicationDoneCallback = std::function<void(StatusOr<tensorflow::Tensor
  */
 template <typename FBS_T>
 struct FBS_TypeBufferOwned {
-  FBS_TypeBufferOwned() = delete;
+  FBS_TypeBufferOwned() = default;
   FBS_TypeBufferOwned(const FBS_TypeBufferOwned& other) { Copy(other.buffer_, other.len_); }
   FBS_TypeBufferOwned(flatbuffers::DetachedBuffer&& buffer) : detached_buffer_(std::move(buffer)) {}
 
@@ -59,7 +60,9 @@ struct FBS_TypeBufferOwned {
   }
 
   ~FBS_TypeBufferOwned() {
-    if (buffer_) free(buffer_);
+    if (buffer_) {
+      free(buffer_);
+    }
   }
 
  private:
@@ -138,7 +141,7 @@ struct CollectiveState {
 
   TensorTable tensor_table;
 
-  std::queue<RequestMessage> message_queue;
+  std::shared_ptr<Channel<RequestMessage>> message_queue{MakeChannel<RequestMessage>()};
 
   ManagedThread background_thread;
 
@@ -167,63 +170,58 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
 /**
  * Process an ResponseMessage by doing a reduction, a gather or raising an error.
  */
-void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) {
-  OpRecord record;
-  {
-    std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
-
-    auto name = response.msg().tensor_name()->str();
-    auto it   = tensor_table.find(name);
-    CHECK(it != tensor_table.end());
-
-    CHECK(response.msg().response_type() == message::ResponseType_ALLREDUCE ||
-          response.msg().response_type() == message::ResponseType_ALLGATHER ||
-          response.msg().response_type() == message::ResponseType_ERROR);
-
-    record = it->second;
-
-    tensor_table.erase(it);
-  }
-
-  Status status;
-  auto dtype = record.in_tensor->dtype();
-
-  if (response.msg().response_type() == message::ResponseType_ALLREDUCE) {
-    switch (dtype) {
-      case message::DataType_TF_INT32:
-        status = AllreduceCpu<int32_t>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
-        break;
-      case message::DataType_TF_FLOAT32:
-        status = AllreduceCpu<float>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
-        break;
-    }
-  } else if (response.msg().response_type() == message::ResponseType_ALLGATHER) {
-    switch (dtype) {
-      case message::DataType_TF_INT32:
-        status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
-        break;
-      case message::DataType_TF_FLOAT32:
-        status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
-        break;
-    }
-  } else if (response.msg().response_type() == message::ResponseType_ERROR) {
-    status = tensorflow::errors::FailedPrecondition(response.msg().error_message()->str());
-  }
-
-  if (status.ok()) {
-    record.callback(StatusOr<Tensor>(*record.out_tensor));
-  } else {
-    record.callback(StatusOr<Tensor>(status));
-  }
-}
+void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response);
 
 // This function adds the op's record into the local op queue and sends a message to the coordinator indicating that
 // this rank is ready to begin. The background thread will handle this message.
 void EnqueueTensorCollective(const OpRecord& record, message::RequestType request_type);
 
+bool IsCoordinator() { return mpi_rank() == 0; }
+
+void BackgroundThreadLoop() {
+  auto& message_queue = CollectiveState::Global().message_queue;
+  auto& message_table = CollectiveState::Global().message_table;
+  if (IsCoordinator()) {
+    CollectiveState::Global().message_table.reset(new MessageTable);
+
+    bool should_shutdown = false;
+
+    std::queue<std::string> ready_to_reduce;
+
+    do {
+      // process all the message in the queue
+      RequestMessage message;
+      if (message_queue->Read(&message)) {
+        if (!IsCoordinator()) {  // send message to coordinator
+          // TODO
+        } else {
+          auto tensor_name = message.msg().tensor_name()->str();
+          bool reduce      = IncreTensorCount(*message_table, std::move(message), mpi_size());
+          if (reduce) {
+            ready_to_reduce.push(tensor_name);
+          }
+        }
+      }
+
+      if (IsCoordinator()) {
+        for (int i = 0; i < ready_to_reduce.size(); i++) {
+          auto name = ready_to_reduce.front();
+          ready_to_reduce.pop();
+
+          ResponseMessage response = ConstructResponseMessage(*message_table, name);
+          // TODO send the response back
+          PerformCollectiveOp(CollectiveState::Global().tensor_table, std::move(response));
+        }
+      }
+
+    } while (!should_shutdown);
+  }
+}
+
 template <typename FBS_T>
 void FBS_TypeBufferOwned<FBS_T>::Copy(const uint8_t* buffer, size_t len) {
   CHECK(!buffer_) << "FBS_TypeBufferOwned duplicate assign found";
+  if (len == 0) return;
   len_    = len;
   buffer_ = reinterpret_cast<uint8_t*>(std::malloc(len));
   CHECK(buffer_) << "allocate memory failed";

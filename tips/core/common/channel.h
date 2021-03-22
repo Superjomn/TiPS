@@ -60,13 +60,11 @@ class Channel {
     return res;
   }
 
-  size_t WriteMove(size_t n, T* p) {
-    if (n == 0) return 0;
-
+  size_t WriteMove(T&& p) {
     std::unique_lock<std::mutex> lock(mu_);
-    size_t finished = WriteMove(n, p, &lock);
+    bool res = WriteMove(std::move(p), &lock);
     Notify();
-    return finished;
+    return res;
   }
 
  private:
