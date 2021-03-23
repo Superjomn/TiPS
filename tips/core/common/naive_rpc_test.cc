@@ -74,7 +74,7 @@ void TestRpc(RpcServer& server) {
       msg.add_greet(greet);
       msg.add_v(2);
       builder.Finish(msg.Finish());
-      server.SendRequest(1, service, builder.GetBufferPointer(), builder.GetSize(), callback);
+      server.SendRequest(2, service, builder.GetBufferPointer(), builder.GetSize(), callback);
     }
   }
 

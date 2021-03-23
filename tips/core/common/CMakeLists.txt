@@ -8,6 +8,7 @@ core_gather_srcs(SRCS
         zmq_message.cc
         semaphore.cc
         channel.cc
+        flatbuffers_utils.cc
         )
 
 cc_test(test_naive_buffer SRCS naive_buffer_test.cc DEPS tipscore)

@@ -65,10 +65,18 @@ class MpiContext {
   // Get the ip address of a specific rank.
   const std::string& ip(int rank) const { return ip_table_[rank]; }
 
+  bool IsInitialized();
+
+  bool IsFinalized();
+
+  static void Initialize(int argc, char** argv) { ZCHECK(MPI_Init(&argc, &argv)); }
+  static void Finalize() { ZCHECK(MPI_Finalize()); }
+
   static MpiContext& Global();
 
  private:
   std::vector<std::string> ip_table_;
+  bool initialized_{};
 };
 
 template <typename T>

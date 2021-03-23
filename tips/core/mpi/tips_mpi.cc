@@ -24,6 +24,18 @@ MpiContext::MpiContext() {
   mpi_barrier();
 }
 
+bool MpiContext::IsInitialized() {
+  int flag;
+  ZCHECK(MPI_Initialized(&flag));
+  return flag;
+}
+
+bool MpiContext::IsFinalized() {
+  int flag;
+  ZCHECK(MPI_Finalized(&flag));
+  return flag;
+}
+
 int mpi_rank() {
   int rank{-1};
   CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);

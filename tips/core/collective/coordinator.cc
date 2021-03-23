@@ -170,18 +170,18 @@ void EnqueueTensorCollective(const OpRecord& record, message::RequestType reques
   CollectiveState::Global().message_queue->WriteMove(std::move(message));
 }
 
-void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) {
+void PerformCollectiveOp(TensorTable& tensor_table, const message::ResponseMessage& response) {
   OpRecord record;
   {
     std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
 
-    auto name = response.msg().tensor_name()->str();
+    auto name = response.tensor_name()->str();
     auto it   = tensor_table.find(name);
     CHECK(it != tensor_table.end());
 
-    CHECK(response.msg().response_type() == message::ResponseType_ALLREDUCE ||
-          response.msg().response_type() == message::ResponseType_ALLGATHER ||
-          response.msg().response_type() == message::ResponseType_ERROR);
+    CHECK(response.response_type() == message::ResponseType_ALLREDUCE ||
+          response.response_type() == message::ResponseType_ALLGATHER ||
+          response.response_type() == message::ResponseType_ERROR);
 
     record = it->second;
 
@@ -191,7 +191,7 @@ void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) 
   Status status;
   auto dtype = record.in_tensor->dtype();
 
-  if (response.msg().response_type() == message::ResponseType_ALLREDUCE) {
+  if (response.response_type() == message::ResponseType_ALLREDUCE) {
     switch (dtype) {
       case message::DataType_TF_INT32:
         status = AllreduceCpu<int32_t>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
@@ -200,7 +200,7 @@ void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) 
         status = AllreduceCpu<float>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
         break;
     }
-  } else if (response.msg().response_type() == message::ResponseType_ALLGATHER) {
+  } else if (response.response_type() == message::ResponseType_ALLGATHER) {
     switch (dtype) {
       case message::DataType_TF_INT32:
         status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
@@ -209,8 +209,8 @@ void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) 
         status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
         break;
     }
-  } else if (response.msg().response_type() == message::ResponseType_ERROR) {
-    status = tensorflow::errors::FailedPrecondition(response.msg().error_message()->str());
+  } else if (response.response_type() == message::ResponseType_ERROR) {
+    status = tensorflow::errors::FailedPrecondition(response.error_message()->str());
   }
 
   if (status.ok()) {
@@ -218,6 +218,102 @@ void PerformCollectiveOp(TensorTable& tensor_table, ResponseMessage&& response) 
   } else {
     record.callback(StatusOr<Tensor>(status));
   }
+}
+
+void BackgroundThreadLoop() {
+  auto& message_queue = CollectiveState::Global().message_queue;
+  auto& message_table = CollectiveState::Global().message_table;
+
+  if (IsCoordinator()) {
+    CollectiveState::Global().message_table.reset(new MessageTable);
+  }
+
+  bool should_shutdown = false;
+
+  std::queue<std::string> ready_to_reduce;
+
+  // the collective_coordinator service received the RequestMessage from workers and push the message to message_queue
+  // directlly. We don't process the message in this RPC service to avoid affecting the global RPC performance, for it
+  // is shared by all the tasks.
+  RpcServer::Global().AddService("collective_coordinator", [](RpcMsgHead head, uint8_t* buf) {
+    auto msg = flatbuffers::GetRoot<message::RequestMessage>(buf);
+    // Copy the message.
+    RequestMessage message = ::tips::collective::CreateRequestMessage(
+        msg->request_rank(),
+        msg->request_type(),
+        msg->tensor_type(),
+        msg->tensor_name()->str(),
+        std::vector<int64_t>(msg->tensor_shape()->begin(), msg->tensor_shape()->end()));
+    CollectiveState::Global().message_queue->WriteMove(std::move(message));
+  });
+
+  auto* rpc_service = RpcServer::Global().LookupService("collective");
+  CHECK(rpc_service);
+
+  // We treat the all the nodes as workers, the rank 0 is the coordinator. When a worker launched Allreduce on a tensor,
+  // it just push a RequestMessage(marked as type ALLREDUCE) to the message_queue, record a CommunicationDoneCallback. A
+  // background thread will process the messages in the message_queue and send the RequestMessage to coordinator. When a
+  // coordinator get a ALLREDUCE RequestMessage, it will put a record in the MessageTable, where a counter keep
+  // recording the latest count of RequestMessage on a tensor. When all the workers' ALLREDUCE message on a specific
+  // tensor arrived on coordinator, the coordinator will schedule a actual Allreduce across all the nodes with the
+  // following steps:
+  //   1. The coordinator send ResponseMessages to all the workers with the tensor's name.
+  //   2. The background thread process the message_queue and get the message, do Allreduce at once
+  //   3. When a tensor's Allreduce is done, the background thread call the CommunicationDoneCallback, and that will
+  //   continue the running of the following TensorFlow Ops.
+
+  do {
+    // process all the message in the queue
+    RequestMessage message;
+    if (message_queue->Read(&message)) {
+      if (!IsCoordinator()) {  // send message to coordinator
+        // When the response arrived from coordinator, a Allreduce will be performed at worker.
+        RpcCallback callback = [&](RpcMsgHead head, uint8_t* buf) {
+          auto msg = flatbuffers::GetRoot<message::ResponseMessage>(buf);
+          if (msg->response_type() == message::ResponseType_SHUTDOWN) {
+            should_shutdown = true;
+          }
+
+          if (msg->response_type() == message::ResponseType_ALLREDUCE) {
+            PerformCollectiveOp(CollectiveState::Global().tensor_table, *msg);
+
+            auto& op_record = CollectiveState::Global().tensor_table[msg->tensor_name()->str()];
+            CHECK(op_record.callback);
+            op_record.callback(StatusOr<Tensor>(*op_record.out_tensor));
+          } else {
+            LOG(FATAL) << "Not supported response type: " << msg->response_type();
+          }
+        };
+        RpcServer::Global().SendRequest(0, rpc_service, message.GetBuffer(), message.GetSize(), callback);
+      } else {
+        auto tensor_name = message.msg().tensor_name()->str();
+        bool reduce      = IncreTensorCount(*message_table, std::move(message), mpi_size());
+        if (reduce) {
+          ready_to_reduce.push(tensor_name);
+        }
+      }
+    }
+
+    if (IsCoordinator()) {
+      for (int i = 0; i < ready_to_reduce.size(); i++) {
+        auto name = ready_to_reduce.front();
+        ready_to_reduce.pop();
+
+        ResponseMessage response = ConstructResponseMessage(*message_table, name);
+        // TODO send the response back
+        for (int serverid = 0; serverid < mpi_size(); serverid++) {
+          RpcServer::Global().SendRequest(serverid,
+                                          rpc_service,
+                                          response.GetBuffer(),
+                                          response.GetSize(),
+                                          [](const RpcMsgHead& head, uint8_t* buf) {
+                                            // Currently, the response from worker is not necessary.
+                                          });
+        }
+      }
+    }
+
+  } while (!should_shutdown);
 }
 
 }  // namespace collective

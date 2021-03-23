@@ -50,6 +50,7 @@ void RpcServer::StartRunLoop() {
     RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(buffer.data());
 
     uint8_t *data = reinterpret_cast<uint8_t *>(buffer.data() + sizeof(RpcMsgHead));
+    if (buffer.size() == sizeof(RpcMsgHead)) data = nullptr;  // empty message content
     switch (head->message_type) {
       case RpcMsgType::REQUEST: {
         CHECK_EQ(head->server_id, mpi_rank());
