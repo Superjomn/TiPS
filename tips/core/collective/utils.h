@@ -1,6 +1,5 @@
 #pragma once
 #include <mpi.h>
-#include <tensorflow/core/framework/op.h>
 #include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/shape_inference.h>
 #include <tensorflow/stream_executor/lib/statusor.h>
@@ -33,14 +32,16 @@ template <typename dtype>
 Status AllreduceCpu(const Tensor* input, Tensor* output, CollectiveOpKind op) {
   const dtype* buffer = reinterpret_cast<const dtype*>(input->tensor_data().data());
   CHECK(output->shape() == input->shape());
+  CHECK(input->dtype() == output->dtype());
 
   // TODO(Superjomn) try the inplace way.
-  ZCHECK(MPI_Allreduce(buffer,
-                       output->data(),
-                       input->tensor_data().size(),
-                       mpi_type_trait<dtype>::type(),
-                       CollectiveOpKindToMpiOp(op),
-                       mpi_comm()));
+  bool suc = MPI_Allreduce(buffer,
+                           output->data(),
+                           input->shape().num_elements(),
+                           mpi_type_trait<dtype>::type(),
+                           CollectiveOpKindToMpiOp(op),
+                           mpi_comm()) == 0;
+  return suc ? Status::OK() : tensorflow::errors::FailedPrecondition("MPI_Allreduce failed");
 }
 
 // TODO(Superjomn) Replace with allgatherv ?
@@ -50,13 +51,15 @@ Status AllgatherCpu(const Tensor* input, Tensor* output) {
   // TODO(Supejomn) do shape check.
 
   // TODO(Superjomn) try the inplace way.
-  ZCHECK(MPI_Allgather(buffer,
-                       input->tensor_data().size(),
-                       mpi_type_trait<dtype>::type(),
-                       output->data(),
-                       input->tensor_data().size(),
-                       mpi_type_trait<dtype>::type(),
-                       mpi_comm()));
+  bool suc = MPI_Allgather(buffer,
+                           input->tensor_data().size(),
+                           mpi_type_trait<dtype>::type(),
+                           output->data(),
+                           input->tensor_data().size(),
+                           mpi_type_trait<dtype>::type(),
+                           mpi_comm()) == 0;
+
+  return suc ? Status::OK() : tensorflow::errors::FailedPrecondition("MPI_Allgather failed");
 }
 
 template <typename dtype>

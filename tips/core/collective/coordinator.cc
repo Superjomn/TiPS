@@ -235,7 +235,7 @@ void BackgroundThreadLoop() {
   // the collective_coordinator service received the RequestMessage from workers and push the message to message_queue
   // directlly. We don't process the message in this RPC service to avoid affecting the global RPC performance, for it
   // is shared by all the tasks.
-  RpcServer::Global().AddService("collective_coordinator", [](RpcMsgHead head, uint8_t* buf) {
+  auto* rpc_service = RpcServer::Global().AddService("collective_coordinator", [](RpcMsgHead head, uint8_t* buf) {
     auto msg = flatbuffers::GetRoot<message::RequestMessage>(buf);
     // Copy the message.
     RequestMessage message = ::tips::collective::CreateRequestMessage(
@@ -246,9 +246,6 @@ void BackgroundThreadLoop() {
         std::vector<int64_t>(msg->tensor_shape()->begin(), msg->tensor_shape()->end()));
     CollectiveState::Global().message_queue->WriteMove(std::move(message));
   });
-
-  auto* rpc_service = RpcServer::Global().LookupService("collective");
-  CHECK(rpc_service);
 
   // We treat the all the nodes as workers, the rank 0 is the coordinator. When a worker launched Allreduce on a tensor,
   // it just push a RequestMessage(marked as type ALLREDUCE) to the message_queue, record a CommunicationDoneCallback. A
@@ -265,9 +262,11 @@ void BackgroundThreadLoop() {
   do {
     // process all the message in the queue
     RequestMessage message;
-    if (message_queue->Read(&message)) {
-      if (!IsCoordinator()) {  // send message to coordinator
-        // When the response arrived from coordinator, a Allreduce will be performed at worker.
+    // The rank 0's RequestMessage is pushed to the message_queue directlly, the other workers' RequestMessages send to
+    // the coordinator's message_queue by RPC service.
+    if (message_queue->Read(&message)) {  // this will hang if message_queue is empty
+      if (!IsCoordinator()) {             // send message to coordinator
+        // callback: When the response arrived from coordinator, a Allreduce will be performed at worker.
         RpcCallback callback = [&](RpcMsgHead head, uint8_t* buf) {
           auto msg = flatbuffers::GetRoot<message::ResponseMessage>(buf);
           if (msg->response_type() == message::ResponseType_SHUTDOWN) {
@@ -284,8 +283,10 @@ void BackgroundThreadLoop() {
             LOG(FATAL) << "Not supported response type: " << msg->response_type();
           }
         };
+        // The workers other than rank 0 send its RequestMessage to the coordinator.
         RpcServer::Global().SendRequest(0, rpc_service, message.GetBuffer(), message.GetSize(), callback);
       } else {
+        // The coordinator collect all the ready_to_reduce tensors.
         auto tensor_name = message.msg().tensor_name()->str();
         bool reduce      = IncreTensorCount(*message_table, std::move(message), mpi_size());
         if (reduce) {

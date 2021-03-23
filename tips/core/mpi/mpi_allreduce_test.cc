@@ -1,8 +1,8 @@
-#include <glog/logging.h>
 #include <mpi.h>
 
 #include <random>
 #include <vector>
+#include "tips/core/common/logging.h"
 
 void test() {
   std::vector<float> rands;

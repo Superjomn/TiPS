@@ -54,8 +54,12 @@
 #define CHECK_LE(x, y) _CHECK_BINARY(x, <=, y)
 #define CHECK_GT(x, y) _CHECK_BINARY(x, >, y)
 #define CHECK_GE(x, y) _CHECK_BINARY(x, >=, y)
+#define CHECK_NEAR(x, y, thre) \
+  CHECK(std::abs((x) - (y)) <= thre) << x << " and " << y << " diff is larger than " << thre;
 
 namespace tips {
+
+#define LITE_WITH_EXCEPTION
 
 #ifdef LITE_WITH_EXCEPTION
 struct PaddleLiteException : public std::exception {
@@ -108,9 +112,6 @@ class LogMessageFatal : public LogMessage {
 #endif
   {
     log_stream_ << '\n';
-#ifdef LITE_WITH_ANDROID
-    ANDROID_LOG_F(log_stream_.str().c_str());
-#endif
     fprintf(stderr, "%s", log_stream_.str().c_str());
 
 #ifdef LITE_WITH_EXCEPTION
@@ -146,9 +147,6 @@ class VLogMessage {
       return;
     }
     log_stream_ << '\n';
-#ifdef LITE_WITH_ANDROID
-    ANDROID_LOG_I(log_stream_.str().c_str());
-#endif
     fprintf(stderr, "%s", log_stream_.str().c_str());
   }
 

@@ -69,6 +69,10 @@ include_directories(${ZeroMQ_INCLUDE_DIR})
 
 set(core_src CACHE INTERNAL "" FORCE)
 
+function(mpi_test testcase nproc)
+  add_test(NAME ${testcase}_main COMMAND mpirun -np ${nproc} --allow-run-as-root ${testcase})
+endfunction()
+
 add_subdirectory(tips)
 
 cc_library(tipscore SRCS ${core_src} DEPS boost fbs_headers_dummy)
