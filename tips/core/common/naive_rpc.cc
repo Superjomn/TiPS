@@ -83,7 +83,7 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const
   size_t len = sizeof(head);
   len += size;
 
-  auto msg = std::make_unique<ZmqMessage>();
+  auto msg = std::unique_ptr<ZmqMessage>(new ZmqMessage);
   msg->Resize(len);
   len = 0;
 
@@ -236,7 +236,7 @@ int RpcServer::BindRandomPort() {
     int port         = 1024 + rand() % (65536 - 1024);
     std::string addr = StringFormat("tcp://%s:%d", MpiContext::Global().ip().c_str(), port);
     int res          = 0;
-    PCHECK((res = zmq_bind(receiver_, addr.c_str()), res == 0 || errno == EADDRINUSE));
+    CHECK((res = zmq_bind(receiver_, addr.c_str()), res == 0 || errno == EADDRINUSE));
 
     if (res == 0) {
       return port;

@@ -1,8 +1,8 @@
 #pragma once
-#include <glog/logging.h>
 #include <mpi.h>
 #include <stdint.h>
 
+#include "tips/core/common/logging.h"
 #include "tips/core/common/naive_buffer.h"
 
 namespace tips {

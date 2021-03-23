@@ -1,7 +1,6 @@
 #pragma once
 
 #include <errno.h>
-#include <glog/logging.h>
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <string.h>
@@ -10,7 +9,9 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
+#include "tips/core/common/logging.h"
 #include "tips/core/common/macro.h"
 
 namespace tips {

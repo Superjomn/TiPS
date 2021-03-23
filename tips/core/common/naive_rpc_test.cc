@@ -1,4 +1,5 @@
 #include "tips/core/common/naive_rpc.h"
+#include "tips/core/collective/utils.h"
 
 #include <mpi.h>
 

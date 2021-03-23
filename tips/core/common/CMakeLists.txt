@@ -9,6 +9,7 @@ core_gather_srcs(SRCS
         semaphore.cc
         channel.cc
         flatbuffers_utils.cc
+        logging.cc
         )
 
 cc_test(test_naive_buffer SRCS naive_buffer_test.cc DEPS tipscore)

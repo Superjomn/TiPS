@@ -1,12 +1,12 @@
 #pragma once
 
-#include <glog/logging.h>
-
 #include <condition_variable>
 #include <deque>
 #include <memory>
 #include <mutex>
 #include <vector>
+
+#include "tips/core/common/logging.h"
 
 namespace tips {
 

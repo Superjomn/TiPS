@@ -60,8 +60,8 @@ function(cc_test TARGET_NAME)
     cmake_parse_arguments(cc_test "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
     add_executable(${TARGET_NAME} ${cc_test_SRCS})
     get_property(os_dependency_modules GLOBAL PROPERTY OS_DEPENDENCY_MODULES)
-    target_link_libraries(${TARGET_NAME} ${cc_test_DEPS} ${os_dependency_modules} tips_gtest_main gtest gflags glog Threads::Threads)
-    add_dependencies(${TARGET_NAME} ${cc_test_DEPS} gtest_main gtest gflags glog extern_gtest)
+    target_link_libraries(${TARGET_NAME} ${cc_test_DEPS} ${os_dependency_modules} tips_gtest_main gtest gflags Threads::Threads)
+    add_dependencies(${TARGET_NAME} ${cc_test_DEPS} gtest_main gtest gflags extern_gtest)
 
     add_test(NAME ${TARGET_NAME}
       COMMAND ${TARGET_NAME} "${cc_test_ARGS}"
@@ -81,8 +81,8 @@ function(cc_binary TARGET_NAME)
   cmake_parse_arguments(cc_binary "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   add_executable(${TARGET_NAME} ${cc_binary_SRCS})
   get_property(os_dependency_modules GLOBAL PROPERTY OS_DEPENDENCY_MODULES)
-  target_link_libraries(${TARGET_NAME} ${cc_binary_DEPS} ${os_dependency_modules} gflags glog)
-  add_dependencies(${TARGET_NAME} ${cc_binary_DEPS} gflags glog)
+  target_link_libraries(${TARGET_NAME} ${cc_binary_DEPS} ${os_dependency_modules} gflags )
+  add_dependencies(${TARGET_NAME} ${cc_binary_DEPS} gflags )
 endfunction()
 
 function(nv_library TARGET_NAME)
@@ -143,8 +143,8 @@ function(nv_test TARGET_NAME)
     cuda_add_executable(${TARGET_NAME} ${nv_test_SRCS})
     get_property(os_dependency_modules GLOBAL PROPERTY OS_DEPENDENCY_MODULES)
     target_link_libraries(${TARGET_NAME} ${nv_test_DEPS} tips_gtest_main gtest
-gflags glog ${os_dependency_modules} ${CUDNN_LIBRARY} ${CUBLAS_LIBRARIES} ${CUDA_LIBRARIES})
-    add_dependencies(${TARGET_NAME} ${nv_test_DEPS} tips_gtest_main gtest gflags glog)
+gflags ${os_dependency_modules} ${CUDNN_LIBRARY} ${CUBLAS_LIBRARIES} ${CUDA_LIBRARIES})
+    add_dependencies(${TARGET_NAME} ${nv_test_DEPS} tips_gtest_main gtest gflags)
     common_link(${TARGET_NAME})
     # add_test(${TARGET_NAME} ${TARGET_NAME})
     add_test(NAME ${TARGET_NAME}

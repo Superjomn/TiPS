@@ -1,5 +1,6 @@
 #include <flatbuffers/flatbuffers.h>
-#include <glog/logging.h>
+
+#include "tips/core/common/common.h"
 
 namespace tips {
 

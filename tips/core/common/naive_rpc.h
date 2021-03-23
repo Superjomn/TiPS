@@ -1,6 +1,5 @@
 #pragma once
 #include <flatbuffers/flatbuffers.h>
-#include <glog/logging.h>
 #include <mpi.h>
 #include <zmq.h>
 
