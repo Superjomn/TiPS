@@ -4,6 +4,7 @@
 #include <tensorflow/core/framework/shape_inference.h>
 #include <tensorflow/stream_executor/lib/statusor.h>
 
+#include "tips/core/message/collective_messages_generated.h"
 #include "tips/core/mpi/tips_mpi.h"
 
 namespace tips {
@@ -24,18 +25,31 @@ enum class CollectiveOpKind {
 
 MPI_Op CollectiveOpKindToMpiOp(CollectiveOpKind op);
 
+static Status TF_DataTypeToMessageDataType(tensorflow::DataType dtype, message::DataType* out) {
+  switch (dtype) {
+    case tensorflow::DataType::DT_FLOAT:
+      *out = message::DataType_TF_FLOAT32;
+      break;
+    case tensorflow::DataType::DT_INT32:
+      *out = message::DataType_TF_INT32;
+      break;
+    default:
+      return tensorflow::errors::FailedPrecondition("Unknown type found");
+  }
+  return Status::OK();
+}
+
 /**
  * Do ring allreduce on CPU device.
  * We utilize the open_mpi allreduce method directlly.
  */
 template <typename dtype>
 Status AllreduceCpu(const Tensor* input, Tensor* output, CollectiveOpKind op) {
-  const dtype* buffer = reinterpret_cast<const dtype*>(input->tensor_data().data());
   CHECK(output->shape() == input->shape());
   CHECK(input->dtype() == output->dtype());
 
   // TODO(Superjomn) try the inplace way.
-  bool suc = MPI_Allreduce(buffer,
+  bool suc = MPI_Allreduce(input->data(),
                            output->data(),
                            input->shape().num_elements(),
                            mpi_type_trait<dtype>::type(),
@@ -47,15 +61,12 @@ Status AllreduceCpu(const Tensor* input, Tensor* output, CollectiveOpKind op) {
 // TODO(Superjomn) Replace with allgatherv ?
 template <typename dtype>
 Status AllgatherCpu(const Tensor* input, Tensor* output) {
-  const dtype* buffer = reinterpret_cast<const dtype*>(input->tensor_data().data());
-  // TODO(Supejomn) do shape check.
-
   // TODO(Superjomn) try the inplace way.
-  bool suc = MPI_Allgather(buffer,
-                           input->tensor_data().size(),
+  bool suc = MPI_Allgather(input->data(),
+                           input->NumElements(),
                            mpi_type_trait<dtype>::type(),
                            output->data(),
-                           input->tensor_data().size(),
+                           input->NumElements(),
                            mpi_type_trait<dtype>::type(),
                            mpi_comm()) == 0;
 

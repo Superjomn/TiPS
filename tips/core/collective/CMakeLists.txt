@@ -4,6 +4,10 @@ core_gather_srcs(SRCS
         ops.cc
         )
 
-cc_binary(test_collective_utils SRCS utils_test.cc DEPS tipscore)
-target_compile_definitions(test_collective_utils PRIVATE _GLIBCXX_USE_CXX11_ABI=0)
-mpi_test(test_collective_utils 5)
+cc_binary(test_collective_allreduce SRCS utils_test.cc DEPS tipscore CXX_FLAGS -DTEST_ALLREDUCE)
+mpi_test(test_collective_allreduce 5)
+
+cc_binary(test_collective_allgather SRCS utils_test.cc DEPS tipscore CXX_FLAGS -DTEST_ALLGATHER)
+mpi_test(test_collective_allgather 3)
+
+#target_compile_definitions(test_collective_allreduce PRIVATE _GLIBCXX_USE_CXX11_ABI=0)

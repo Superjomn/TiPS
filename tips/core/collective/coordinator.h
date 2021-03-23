@@ -60,11 +60,15 @@ struct OpRecord {
   // The input tensor.
   const Tensor* in_tensor;
 
+  Tensor temp_tensor;
+
   // Allgather: vector of per-rank first-dimension sizes.
   std::vector<int64_t> sizes_vec;
 
   // The output tensor.
   Tensor* out_tensor;
+
+  bool on_gpu{};
 
   // The callback to call after the op has completed.
   CommunicationDoneCallback callback;

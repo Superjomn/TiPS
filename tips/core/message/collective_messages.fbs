@@ -14,6 +14,7 @@ enum ResponseType : short {
 }
 
 enum DataType : short {
+  TF_UNK = -1,
   TF_FLOAT32 = 0,
   TF_INT32 = 1,
 }
