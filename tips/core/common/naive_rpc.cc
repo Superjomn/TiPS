@@ -9,6 +9,7 @@ RpcServer::~RpcServer() {
 }
 
 RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback) {
+  LOG(INFO) << "Add RPC service [" << type << "]";
   auto *new_service = new RpcService(std::move(callback));
   CHECK(!services_.count(type)) << "duplicate add service [" << type << "]";
   services_.emplace(type, new_service);
@@ -90,7 +91,9 @@ std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const
   std::memcpy(msg->buffer() + len, &head, sizeof(head));
   len += sizeof(head);
 
-  std::memcpy(msg->buffer() + len, buf, size);
+  if (size > 0) {
+    std::memcpy(msg->buffer() + len, buf, size);
+  }
 
   return msg;
 }

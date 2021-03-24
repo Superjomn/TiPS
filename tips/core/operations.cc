@@ -14,9 +14,18 @@ void tips_init() {
   LOG(INFO) << "Initialize RPC ...";
   RpcServer::Global().Initialize();
   LOG(WARNING) << "Initialize TiPS done";
+
+  collective::CollectiveState::Global().Initialize();
 }
 
 void tips_shutdown() {
+  using namespace std::chrono_literals;
+
+  std::this_thread::sleep_for(1000ms);
+  LOG(WARNING) << "Shutdown collective state";
+  collective::CollectiveState::Global().Finalize();
+
+  std::this_thread::sleep_for(1000ms);
   LOG(WARNING) << "Shutdown global RPC server";
   RpcServer::Global().Finalize();
 

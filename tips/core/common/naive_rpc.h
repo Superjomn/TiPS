@@ -36,6 +36,8 @@ const char* GetRpcMsgTypeRepr(RpcMsgType type);
 std::ostream& operator<<(std::ostream& os, RpcMsgType type);
 
 struct RpcMsgHead {
+  bool initialized() const { return service; }
+
   RpcService* service{};
   RpcRequest* request{};
 

@@ -9,4 +9,4 @@ mpi_test(test_collective_allreduce 5)
 cc_binary(test_collective_allgather SRCS utils_test.cc DEPS tipscore CXX_FLAGS -DTEST_ALLGATHER)
 mpi_test(test_collective_allgather 3)
 
-#target_compile_definitions(test_collective_allreduce PRIVATE _GLIBCXX_USE_CXX11_ABI=0)
+cc_binary(test_coordinator SRCS coordinator_test.cc DEPS tipscore)

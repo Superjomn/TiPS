@@ -23,13 +23,28 @@ class TensorFlowTests(tf.test.TestCase):
         else:
             return sess.run(tensors)
 
-    def test_tips_rank(self):
+    def test_tips_rank_op(self):
         rank = self.evaluate(tips_ops.rank())
         print('rank', rank)
 
-    def test_tips_size(self):
+    def test_tips_size_op(self):
         size = self.evaluate(tips_ops.size())
         print('size', size)
+
+    def test_tips_allreduce_cpu(self):
+        dim = 3
+        with tf.device("/cpu:0"):
+            tensor = self._random_uniform(
+                [17] * dim, -100, 100, dtype=tf.float32)
+            summed = tips_ops.allreduce(tensor)
+
+    def _random_uniform(self, *args, **kwargs):
+        if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):
+            tf.random.set_seed(1234)
+            return tf.random.uniform(*args, **kwargs)
+        else:
+            tf.set_random_seed(1234)
+            return tf.random_uniform(*args, **kwargs)
 
 
 from tensorflow.python.framework.test_util import run_all_in_graph_and_eager_modes

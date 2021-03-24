@@ -9,11 +9,12 @@ namespace tips {
  */
 template <typename FBS_T>
 struct FBS_TypeBufferOwned {
-  FBS_TypeBufferOwned() = default;
+  FBS_TypeBufferOwned() {}
   FBS_TypeBufferOwned(const FBS_TypeBufferOwned& other) { Copy(other.buffer_, other.len_); }
   FBS_TypeBufferOwned(flatbuffers::DetachedBuffer&& buffer)
       : detached_buffer_(new flatbuffers::DetachedBuffer(std::move(buffer))) {}
   FBS_TypeBufferOwned& operator=(FBS_TypeBufferOwned&& other);
+  FBS_TypeBufferOwned& operator=(const FBS_TypeBufferOwned& other) = delete;
 
   /**
    * construct.
@@ -22,6 +23,7 @@ struct FBS_TypeBufferOwned {
    * @param need_copy whether need to allocate memory and copy the data, false will just copy the pointer.
    */
   FBS_TypeBufferOwned(uint8_t* buffer, size_t len, bool need_copy = true) {
+    VLOG(5) << "Copy a FBS_TypeBufferOwned";
     if (need_copy) {
       Copy(buffer, len);
     } else {
@@ -32,8 +34,10 @@ struct FBS_TypeBufferOwned {
 
   FBS_TypeBufferOwned(FBS_TypeBufferOwned&& other)
       : buffer_(other.buffer_), len_(other.len_), detached_buffer_(std::move(other.detached_buffer_)) {
+    VLOG(5) << "Move a FBS_TypeBufferOwned";
     other.buffer_ = nullptr;
     other.len_    = 0;
+    CHECK(buffer_ || detached_buffer_);
   }
 
   const FBS_T& msg() const {

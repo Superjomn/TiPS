@@ -92,7 +92,8 @@ struct CollectiveState {
 
   TensorTable tensor_table;
 
-  std::shared_ptr<Channel<RequestMessage>> message_queue{MakeChannel<RequestMessage>()};
+  std::shared_ptr<Channel<std::pair<RpcMsgHead, RequestMessage>>> message_queue{
+      MakeChannel<std::pair<RpcMsgHead, RequestMessage>>()};
 
   ManagedThread background_thread;
 
@@ -106,6 +107,13 @@ struct CollectiveState {
     static CollectiveState x;
     return x;
   }
+
+  bool initialized() const;
+
+  void Initialize();
+
+  //! Tell the background thread to quit.
+  void Finalize();
 
   ~CollectiveState() { background_thread.Terminate(); }
 };
@@ -121,7 +129,10 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
 /**
  * Process an ResponseMessage by doing a reduction, a gather or raising an error.
  */
-void PerformCollectiveOp(TensorTable& tensor_table, const message::ResponseMessage& response);
+void PerformCollectiveOp(TensorTable& tensor_table,
+                         message::ResponseType response_type,
+                         const std::string name,
+                         const std::string& error_msg);
 
 // This function adds the op's record into the local op queue and sends a message to the coordinator indicating that
 // this rank is ready to begin. The background thread will handle this message.
@@ -134,6 +145,8 @@ inline bool IsCoordinator() { return mpi_rank() == 0; }
  * NOTE this function should be triggered after MPI and RPC is initialized.
  */
 void BackgroundThreadLoop();
+
+void ShutdownBackgroundService();
 
 }  // namespace collective
 }  // namespace tips
