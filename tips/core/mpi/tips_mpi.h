@@ -69,6 +69,7 @@ class MpiContext {
 
   bool IsFinalized();
 
+  static void Initialize(int* argc = nullptr, char*** argv = nullptr);
   static void Initialize(int argc, char** argv) { ZCHECK(MPI_Init(&argc, &argv)); }
   static void Finalize() { ZCHECK(MPI_Finalize()); }
 

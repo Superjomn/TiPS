@@ -127,7 +127,7 @@ void PerformCollectiveOp(TensorTable& tensor_table, const message::ResponseMessa
 // this rank is ready to begin. The background thread will handle this message.
 void EnqueueTensorCollective(const OpRecord& record, message::RequestType request_type);
 
-bool IsCoordinator() { return mpi_rank() == 0; }
+inline bool IsCoordinator() { return mpi_rank() == 0; }
 
 /**
  * The background thread logic.

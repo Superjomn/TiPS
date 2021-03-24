@@ -49,6 +49,7 @@ Status AllreduceCpu(const Tensor* input, Tensor* output, CollectiveOpKind op) {
   CHECK(input->dtype() == output->dtype());
 
   // TODO(Superjomn) try the inplace way.
+  // TODO(Superjomn) try the compress way(float16?)
   bool suc = MPI_Allreduce(input->data(),
                            output->data(),
                            input->shape().num_elements(),

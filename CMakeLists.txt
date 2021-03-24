@@ -75,6 +75,6 @@ endfunction()
 
 add_subdirectory(tips)
 
-cc_library(tipscore SRCS ${core_src} DEPS boost fbs_headers_dummy)
+cc_library(tipscore SRCS ${core_src} DEPS boost fbs_headers_dummy SHARED)
 target_compile_definitions(tipscore PRIVATE _GLIBCXX_USE_CXX11_ABI=0)
 target_link_libraries(tipscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY} ${Tensorflow_LIBRARIES} fbs_headers_dummy)

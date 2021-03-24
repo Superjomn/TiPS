@@ -10,6 +10,10 @@ MpiContext &MpiContext::Global() {
 }
 
 MpiContext::MpiContext() {
+  if (!IsInitialized()) {
+    Initialize();
+  }
+
   int rank;
   int size;
   CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);
@@ -35,6 +39,8 @@ bool MpiContext::IsFinalized() {
   ZCHECK(MPI_Finalized(&flag));
   return flag;
 }
+
+void MpiContext::Initialize(int *argc, char ***argv) { ZCHECK(MPI_Init(argc, argv)) << "MPI init failed"; }
 
 int mpi_rank() {
   int rank{-1};

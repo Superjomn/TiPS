@@ -1,4 +1,4 @@
-#include "tips/core/collective/ops.h"
+#include "tips/tensorflow/ops.h"
 #include "tips/core/collective/coordinator.h"
 #include "tips/core/mpi/tips_mpi.h"
 
@@ -8,13 +8,19 @@ using namespace tensorflow;
 
 using CPUDevice = Eigen::ThreadPoolDevice;
 
+Status IsMpiIntialized() {
+  if (!MpiContext::Global().IsInitialized()) return errors::FailedPrecondition("MPI is not initialized");
+  if (!RpcServer::Global().initialized()) return errors::FailedPrecondition("Global RPC server is not initialized");
+  return Status::OK();
+}
+
 template <typename Device>
 class MpiSizeOp : public tensorflow::OpKernel {
  public:
   explicit MpiSizeOp(OpKernelConstruction* context) : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    CHECK(MpiContext::Global().IsInitialized()) << "MPI is not initialized";
+    OP_REQUIRES_OK(context, IsMpiIntialized());
     // Write integer to output tensor
     Tensor* output;
     OP_REQUIRES_OK(context, context->allocate_output(0, TensorShape({}), &output));
@@ -23,6 +29,7 @@ class MpiSizeOp : public tensorflow::OpKernel {
     flat(0)   = mpi_size();
   }
 };
+
 REGISTER_KERNEL_BUILDER(Name("MPISize").Device(DEVICE_CPU), MpiSizeOp<CPUDevice>);
 
 REGISTER_OP("MPISize")
@@ -43,7 +50,7 @@ class MpiRankOp : public OpKernel {
   explicit MpiRankOp(OpKernelConstruction* context) : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    CHECK(MpiContext::Global().IsInitialized());
+    OP_REQUIRES_OK(context, IsMpiIntialized());
 
     Tensor* output;
     OP_REQUIRES_OK(context, context->allocate_output(0, TensorShape({}), &output));
@@ -53,7 +60,7 @@ class MpiRankOp : public OpKernel {
   }
 };
 
-REGISTER_KERNEL_BUILDER(Name("MPIRank").Device(DEVICE_GPU), MpiRankOp<CPUDevice>);
+REGISTER_KERNEL_BUILDER(Name("MPIRank").Device(DEVICE_CPU), MpiRankOp<CPUDevice>);
 
 REGISTER_OP("MPIRank")
     .Output("rank: int32")
@@ -64,12 +71,6 @@ REGISTER_OP("MPIRank")
     .Doc(R"doc(
 Returns the index of the current process in the MPI group.
 )doc");
-
-Status IsMpiIntialized() {
-  if (!MpiContext::Global().IsInitialized()) return errors::FailedPrecondition("MPI is not initialized");
-  if (!RpcServer::Global().initialized()) return errors::FailedPrecondition("Global RPC server is not initialized");
-  return Status::OK();
-}
 
 template <typename Device>
 class MpiAllreduceOp : public AsyncOpKernel {
@@ -113,7 +114,7 @@ class MpiAllreduceOp : public AsyncOpKernel {
 REGISTER_KERNEL_BUILDER(Name("MPIAllreduce").Device(DEVICE_CPU), MpiAllreduceOp<CPUDevice>);
 
 REGISTER_OP("MPIAllreduce")
-    .Attr("T: {int32, int64, float32")
+    .Attr("T: {int32, int64, float32}")
     .Input("tensor: T")
     .Output("sum: T")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
