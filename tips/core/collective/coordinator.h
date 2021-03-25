@@ -95,7 +95,7 @@ struct CollectiveState {
   std::shared_ptr<Channel<std::pair<RpcMsgHead, RequestMessage>>> message_queue{
       MakeChannel<std::pair<RpcMsgHead, RequestMessage>>()};
 
-  ManagedThread background_thread;
+  std::thread background_thread;
 
   bool shut_down = false;
 
@@ -115,7 +115,9 @@ struct CollectiveState {
   //! Tell the background thread to quit.
   void Finalize();
 
-  ~CollectiveState() { background_thread.Terminate(); }
+  ~CollectiveState() {
+    if (background_thread.joinable()) background_thread.join();
+  }
 };
 
 /**

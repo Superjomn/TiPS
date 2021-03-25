@@ -363,7 +363,7 @@ void BackgroundThreadLoop() {
   } while (!CollectiveState::Global().shut_down);
 }
 
-bool CollectiveState::initialized() const { return background_thread.IsActive(); }
+bool CollectiveState::initialized() const { return message_table.get(); }
 
 void CollectiveState::Initialize() {
   // the collective_coordinator service received the RequestMessage from workers and push the message to message_queue
@@ -386,7 +386,7 @@ void CollectiveState::Initialize() {
     RpcServer::Global().SendResponse(head, nullptr, 0);
   });
 
-  background_thread.Start([] { BackgroundThreadLoop(); });
+  background_thread = std::thread([] { BackgroundThreadLoop(); });
 }
 
 void CollectiveState::Finalize() {
@@ -399,7 +399,9 @@ void CollectiveState::Finalize() {
   }
 
   LOG(INFO) << "Join the background thread";
-  CollectiveState::Global().background_thread.Terminate();
+  message_queue->Close();
+  shut_down = true;
+  CollectiveState::Global().background_thread.join();
 }
 
 void ShutdownBackgroundService() {
