@@ -1,4 +1,5 @@
 #include "tips/core/collective/utils.h"
+
 #include "tips/core/mpi/tips_mpi.h"
 
 namespace tips {

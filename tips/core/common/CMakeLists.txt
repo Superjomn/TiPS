@@ -18,3 +18,5 @@ target_link_libraries(test_channel ${Tensorflow_LIBRARIES})
 
 cc_binary(test_naive_rpc SRCS naive_rpc_test.cc DEPS tipscore)
 mpi_test(test_naive_rpc 3)
+
+cc_test(test_flatbuffers_utils SRCS flatbuffers_utils_test.cc DEPS tipscore)

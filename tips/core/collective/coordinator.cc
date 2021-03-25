@@ -7,6 +7,7 @@ const char* kShutdownRpcServiceName    = "collective_shutdown";
 const char* kCoordinatorRpcServiceName = "collective_coordinator";
 
 bool IncreTensorCount(MessageTable& table, RequestMessage&& msg, int mpi_size) {
+  CHECK(msg.HasData()) << "Message is invalid";
   auto name = msg.msg().tensor_name()->str();
   LOG(INFO) << "IncreTensorCount: " << msg.msg().tensor_name()->str();
   auto table_iter = table.find(name);
@@ -15,6 +16,11 @@ bool IncreTensorCount(MessageTable& table, RequestMessage&& msg, int mpi_size) {
     table_iter = table.find(name);
   } else {
     table_iter->second.emplace_back(std::move(msg));
+  }
+
+  LOG(INFO) << "tensor record " << table_iter->first << " count: " << table_iter->second.size();
+  for (int i = 0; i < table_iter->second.size(); i++) {
+    CHECK(table_iter->second[i].HasData()) << i << "-th Message is invalid";
   }
 
   return table_iter->second.size() == mpi_size;
@@ -29,6 +35,7 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
   CHECK_GT(requests.size(), 0);
   LOG(INFO) << "requests.size: " << requests.size();
   LOG(INFO) << "to visit request";
+  CHECK(requests[0].HasData()) << "request message is invalid";
   LOG(INFO) << requests[0].msg().tensor_name()->str();
 
   bool error = false;
@@ -174,7 +181,8 @@ void EnqueueTensorCollective(const OpRecord& record, message::RequestType reques
   auto message = CreateRequestMessage(record.rank, request_type, record.dtype, record.name, shape);
   LOG(INFO) << "message.name: " << message.msg().tensor_name()->str();
 
-  LOG(INFO) << "Enqueue a record to the queue";
+  LOG(INFO) << "#rank-" << mpi_rank() << " enqueue record [" << record.name << "] to the queue";
+  CHECK(record.callback);
 
   {
     std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
@@ -203,29 +211,35 @@ void PerformCollectiveOp(TensorTable& tensor_table,
 
     record = it->second;
 
-    tensor_table.erase(it);
+    // tensor_table.erase(it);
   }
 
   Status status;
-  auto dtype = record.in_tensor->dtype();
+  auto dtype = record.dtype;
 
   if (response_type == message::ResponseType_ALLREDUCE) {
+    LOG(INFO) << "Run MPI ALLREDUCE ...";
     switch (dtype) {
       case message::DataType_TF_INT32:
+        LOG(INFO) << "Allreduce int32 ...";
         status = AllreduceCpu<int32_t>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
         break;
       case message::DataType_TF_FLOAT32:
+        LOG(INFO) << "Allreduce float32 ...";
         status = AllreduceCpu<float>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
         break;
     }
   } else if (response_type == message::ResponseType_ALLGATHER) {
+    LOG(INFO) << "Run MPI ALLGATHER ...";
     switch (dtype) {
-      case message::DataType_TF_INT32:
-        status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
-        break;
-      case message::DataType_TF_FLOAT32:
-        status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
-        break;
+      switch (dtype) {
+        case message::DataType_TF_INT32:
+          status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
+          break;
+        case message::DataType_TF_FLOAT32:
+          status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
+          break;
+      }
     }
   } else if (response_type == message::ResponseType_ERROR) {
     status = tensorflow::errors::FailedPrecondition(error_msg);
@@ -248,13 +262,13 @@ void BackgroundThreadLoop() {
 
   std::queue<std::string> ready_to_reduce;
 
-  // We treat the all the nodes as workers, the rank 0 is the coordinator. When a worker launched Allreduce on a tensor,
-  // it just push a RequestMessage(marked as type ALLREDUCE) to the message_queue, record a CommunicationDoneCallback. A
-  // background thread will process the messages in the message_queue and send the RequestMessage to coordinator. When a
-  // coordinator get a ALLREDUCE RequestMessage, it will put a record in the MessageTable, where a counter keep
-  // recording the latest count of RequestMessage on a tensor. When all the workers' ALLREDUCE message on a specific
-  // tensor arrived on coordinator, the coordinator will schedule a actual Allreduce across all the nodes with the
-  // following steps:
+  // We treat the all the nodes as workers, the rank 0 is the coordinator. When a worker launched Allreduce on a
+  // tensor, it just push a RequestMessage(marked as type ALLREDUCE) to the message_queue, record a
+  // CommunicationDoneCallback. A background thread will process the messages in the message_queue and send the
+  // RequestMessage to coordinator. When a coordinator get a ALLREDUCE RequestMessage, it will put a record in the
+  // MessageTable, where a counter keep recording the latest count of RequestMessage on a tensor. When all the
+  // workers' ALLREDUCE message on a specific tensor arrived on coordinator, the coordinator will schedule a actual
+  // Allreduce across all the nodes with the following steps:
   //   1. The coordinator send ResponseMessages to all the workers with the tensor's name.
   //   2. The background thread process the message_queue and get the message, do Allreduce at once
   //   3. When a tensor's Allreduce is done, the background thread call the CommunicationDoneCallback, and that will
@@ -269,8 +283,8 @@ void BackgroundThreadLoop() {
   do {
     // process all the message in the queue
     std::pair<RpcMsgHead, RequestMessage> message;
-    // The rank 0's RequestMessage is pushed to the message_queue directlly, the other workers' RequestMessages send to
-    // the coordinator's message_queue by RPC service.
+    // The rank 0's RequestMessage is pushed to the message_queue directlly, the other workers' RequestMessages send
+    // to the coordinator's message_queue by RPC service.
     if (message_queue->Read(&message)) {  // this will hang if message_queue is empty
       LOG(INFO) << "rank-" << mpi_rank() << " read a message from message_queue";
       if (!IsCoordinator()) {  // send message to coordinator
@@ -283,14 +297,20 @@ void BackgroundThreadLoop() {
           }
 
           if (msg->response_type() == message::ResponseType_ALLREDUCE) {
+            LOG(INFO) << "#rank-" << mpi_rank() << " get response for [" << msg->tensor_name()->str() << "]";
             PerformCollectiveOp(CollectiveState::Global().tensor_table,
                                 msg->response_type(),
                                 msg->tensor_name()->str(),
-                                msg->error_message()->str());
+                                msg->error_message() ? msg->error_message()->str() : "");
 
-            auto& op_record = CollectiveState::Global().tensor_table[msg->tensor_name()->str()];
+            auto record_iter = CollectiveState::Global().tensor_table.find(msg->tensor_name()->str());
+            CHECK(record_iter != CollectiveState::Global().tensor_table.end())
+                << "tensor_table has no record for [" << msg->tensor_name()->str() << "]";
+            auto& op_record = record_iter->second;
             CHECK(op_record.callback);
             op_record.callback(StatusOr<Tensor>(*op_record.out_tensor));
+
+            CollectiveState::Global().tensor_table.erase(record_iter);
           } else {
             LOG(FATAL) << "Not supported response type: " << msg->response_type();
           }
@@ -304,6 +324,7 @@ void BackgroundThreadLoop() {
         if (message.first.initialized())
           tensor_requests[tensor_name].push_back(message.first);  // record RpcMsgHead for latter response construction.
 
+        CHECK(message.second.HasData()) << "Message is invalid";
         bool reduce = IncreTensorCount(*message_table, std::move(message.second), mpi_size());
         if (reduce) {
           LOG(INFO) << "get a ready to reduce tensor: [" << tensor_name << "]";

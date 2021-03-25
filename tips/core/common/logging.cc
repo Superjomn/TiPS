@@ -1,4 +1,5 @@
 #include "tips/core/common/logging.h"
+
 #include <iomanip>
 
 namespace tips {

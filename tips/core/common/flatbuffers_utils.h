@@ -9,12 +9,45 @@ namespace tips {
  */
 template <typename FBS_T>
 struct FBS_TypeBufferOwned {
+  using self_t = FBS_TypeBufferOwned<FBS_T>;
+
   FBS_TypeBufferOwned() {}
-  FBS_TypeBufferOwned(const FBS_TypeBufferOwned& other) { Copy(other.buffer_, other.len_); }
-  FBS_TypeBufferOwned(flatbuffers::DetachedBuffer&& buffer)
+  FBS_TypeBufferOwned(const FBS_TypeBufferOwned& other) = delete;
+  explicit FBS_TypeBufferOwned(flatbuffers::DetachedBuffer&& buffer)
       : detached_buffer_(new flatbuffers::DetachedBuffer(std::move(buffer))) {}
-  FBS_TypeBufferOwned& operator=(FBS_TypeBufferOwned&& other);
+
+  FBS_TypeBufferOwned& operator=(FBS_TypeBufferOwned&& other) {
+    MoveFrom(std::move(other));
+    return *this;
+  }
   FBS_TypeBufferOwned& operator=(const FBS_TypeBufferOwned& other) = delete;
+
+  self_t& CopyFrom(const self_t& other) {
+    CHECK(!HasData()) << "The destination of CopyFrom should be empty";
+    if (other.HasData()) {
+      buffer_ = new uint8_t[other.GetSize()];
+      std::memcpy(buffer_, other.GetBuffer(), other.GetSize());
+    }
+    return *this;
+  }
+
+  self_t& MoveFrom(self_t&& other) {
+    CHECK(!HasData()) << "The destination of MoveFrom should be empty";
+    if (other.HasData()) {
+      if (other.buffer_) {
+        buffer_       = other.buffer_;
+        len_          = other.len_;
+        other.buffer_ = nullptr;
+        other.len_    = 0;
+      } else if (other.detached_buffer_) {
+        detached_buffer_ = std::move(other.detached_buffer_);
+      }
+    }
+
+    return *this;
+  }
+
+  bool HasData() const { return buffer_ || detached_buffer_; }
 
   /**
    * construct.
@@ -22,26 +55,15 @@ struct FBS_TypeBufferOwned {
    * @param len length of the buffer.
    * @param need_copy whether need to allocate memory and copy the data, false will just copy the pointer.
    */
-  FBS_TypeBufferOwned(uint8_t* buffer, size_t len, bool need_copy = true) {
+  FBS_TypeBufferOwned(uint8_t* buffer, size_t len) {
     VLOG(5) << "Copy a FBS_TypeBufferOwned";
-    if (need_copy) {
-      Copy(buffer, len);
-    } else {
-      buffer_ = buffer;
-      len_    = len;
-    }
+    Copy(buffer, len);
   }
 
-  FBS_TypeBufferOwned(FBS_TypeBufferOwned&& other)
-      : buffer_(other.buffer_), len_(other.len_), detached_buffer_(std::move(other.detached_buffer_)) {
-    VLOG(5) << "Move a FBS_TypeBufferOwned";
-    other.buffer_ = nullptr;
-    other.len_    = 0;
-    CHECK(buffer_ || detached_buffer_);
-  }
+  FBS_TypeBufferOwned(FBS_TypeBufferOwned&& other) { MoveFrom(std::move(other)); }
 
   const FBS_T& msg() const {
-    CHECK(buffer_ || detached_buffer_);
+    CHECK(HasData());
     if (buffer_) {
       return *flatbuffers::GetRoot<FBS_T>(buffer_);
     } else {
@@ -76,29 +98,6 @@ void FBS_TypeBufferOwned<FBS_T>::Copy(const uint8_t* buffer, size_t len) {
   buffer_ = reinterpret_cast<uint8_t*>(std::malloc(len));
   CHECK(buffer_) << "allocate memory failed";
   std::memcpy(buffer_, buffer, len);
-}
-
-template <typename FBS_T>
-FBS_TypeBufferOwned<FBS_T>& FBS_TypeBufferOwned<FBS_T>::operator=(FBS_TypeBufferOwned&& other) {
-  // Clear this.
-  if (buffer_) {
-    delete buffer_;
-  }
-  detached_buffer_.reset(nullptr);
-
-  // Set the new data
-  if (other.buffer_) {
-    buffer_       = other.buffer_;
-    len_          = other.len_;
-    other.buffer_ = nullptr;
-    other.len_    = 0;
-  }
-
-  if (other.detached_buffer_) {
-    detached_buffer_ = std::move(other.detached_buffer_);
-  }
-
-  return *this;
 }
 
 }  // namespace tips

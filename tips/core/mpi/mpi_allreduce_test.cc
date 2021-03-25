@@ -2,6 +2,7 @@
 
 #include <random>
 #include <vector>
+
 #include "tips/core/common/logging.h"
 
 void test() {

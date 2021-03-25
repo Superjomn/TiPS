@@ -1,11 +1,11 @@
 #include "tips/core/common/naive_rpc.h"
-#include "tips/core/collective/utils.h"
 
 #include <mpi.h>
 
 #include <chrono>
 #include <thread>
 
+#include "tips/core/collective/utils.h"
 #include "tips/core/message/test0_generated.h"
 
 namespace tips {
