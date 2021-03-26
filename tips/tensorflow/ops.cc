@@ -184,5 +184,70 @@ class MpiBroadcastOp : public AsyncOpKernel {
   bool ignore_name_scope_;
 };
 
+template <typename Device>
+class MpiAllgatherOp : public AsyncOpKernel {
+ public:
+  explicit MpiAllgatherOp(OpKernelConstruction* context) : AsyncOpKernel(context) {}
+
+  bool IsExpensive() override { return false; }
+
+  void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
+    OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
+    const auto* input_tensor = &context->input(0);
+    Tensor* output_tensor;
+    OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, input_tensor->shape(), &output_tensor), done);
+
+    LOG(INFO) << "running op: " << name();
+    OpRecord record;
+    record.name       = name();
+    record.op_context = context;
+    record.in_tensor  = input_tensor;
+    record.out_tensor = nullptr;  // Output shape is not known now.
+    record.on_gpu     = false;
+    record.dtype      = message::DataType_TF_UNK;
+
+    OP_REQUIRES_OK_ASYNC(context, TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype), done);
+
+    const size_t temp_size = (input_tensor->NumElements() + mpi_size() - 1) / mpi_size();
+    TensorShape temp_shape;
+    temp_shape.AddDim(temp_size);
+    OP_REQUIRES_OK_ASYNC(context, context->allocate_temp(input_tensor->dtype(), temp_shape, &record.temp_tensor), done);
+
+    record.callback = [done, context](StatusOr<Tensor> status) {
+      context->SetStatus(status.status());
+      done();
+    };
+
+    auto allreduce_launch_callback = [record] { EnqueueTensorCollective(record, message::RequestType_ALLGATHER); };
+
+    allreduce_launch_callback();
+  }
+};
+
+REGISTER_KERNEL_BUILDER(Name("MPIAllgather").Device(DEVICE_CPU), MpiAllgatherOp<CPUDevice>);
+
+REGISTER_OP("MpiAllgather")
+    .Attr("T: {uint8, int8, uint16, int16, int32, int64, float16, float32, float64, bool}")
+    .Attr("ignore_name_scope: bool = False")
+    .Input("tensor: T")
+    .Output("output: T")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      shape_inference::ShapeHandle output;
+      TF_RETURN_IF_ERROR(c->ReplaceDim(c->input(0), 0, c->UnknownDim(), &output));
+      c->set_output(0, output);
+      return Status::OK();
+    })
+    .Doc(R"doc(
+Perform an MPI Allgather on a tensor. All other processes that do a gather on a
+tensor with the same name must have the same rank for that tensor, and have the
+same dimension on all but the first dimension.
+
+Arguments
+    tensor:     A tensor to gather.
+
+Output
+    gathered:    A tensor with the same shape as `tensor` except for the first dimension.
+)doc");
+
 }  // namespace collective
 }  // namespace tips

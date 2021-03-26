@@ -1,7 +1,9 @@
 #include "tips/core/collective/coordinator.h"
+#include <absl/types/span.h>
 
 namespace tips {
 namespace collective {
+using tensorflow::TensorShape;
 
 const char* kShutdownRpcServiceName    = "collective_shutdown";
 const char* kCoordinatorRpcServiceName = "collective_coordinator";
@@ -24,6 +26,48 @@ bool IncreTensorCount(MessageTable& table, RequestMessage&& msg, int mpi_size) {
   }
 
   return table_iter->second.size() == mpi_size;
+}
+
+std::vector<int64_t> GatherFirstRankSizes(absl::Span<RequestMessage> requests,
+                                          bool& error,
+                                          std::stringstream& error_stream) {
+  std::vector<int64_t> tensor_sizes(requests.size(), 0);
+
+  tensorflow::TensorShape tensor_shape;
+  for (int64_t d : *requests[0].msg().tensor_shape()) {
+    tensor_shape.AddDim(d);
+  }
+
+  if (tensor_shape.dims() == 0) {
+    error = true;
+    error_stream << "An empty tensor found";
+  } else {
+    tensor_sizes[requests[0].msg().request_rank()] = tensor_shape.dim_size(0);
+  }
+
+  for (int i = 1; i < requests.size() && !error; i++) {
+    tensorflow::TensorShape request_shape;
+    for (int64_t d : *requests[i].msg().tensor_shape()) {
+      request_shape.AddDim(d);
+    }
+    if (tensor_shape.dims() != request_shape.dims()) {
+      error = true;
+      error_stream << "Mismatched allgather tensor shapes: rank " << tensor_shape.dims() << " vs "
+                   << request_shape.dims();
+    }
+
+    for (int dim = 1; dim < tensor_shape.dims() && !error; dim++) {
+      if (tensor_shape.dim_size(dim) != request_shape.dim_size(dim)) {
+        error = true;
+        error_stream << "Mismatched allgather tensor shapes: " << dim << "-th dimension " << tensor_shape.dim_size(dim)
+                     << " vs " << request_shape.dim_size(dim);
+      }
+    }
+
+    tensor_sizes[requests[i].msg().request_rank()] = request_shape.dim_size(0);
+  }
+
+  return tensor_sizes;
 }
 
 ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string& name) {
@@ -84,39 +128,8 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
   // different and the output tensor is the sum of the first dimension.
   std::vector<int64_t> tensor_sizes(requests.size());
   if (operation_type == message::RequestType_ALLGATHER) {
-    tensorflow::TensorShape tensor_shape;
-    for (int64_t d : *requests[0].msg().tensor_shape()) {
-      tensor_shape.AddDim(d);
-    }
-
-    if (tensor_shape.dims() == 0) {
-      error = true;
-      error_stream << "An empty tensor found";
-    } else {
-      tensor_sizes[requests[0].msg().request_rank()] = tensor_shape.dim_size(0);
-    }
-
-    for (int i = 1; i < requests.size() && !error; i++) {
-      tensorflow::TensorShape request_shape;
-      for (int64_t d : *requests[i].msg().tensor_shape()) {
-        request_shape.AddDim(d);
-      }
-      if (tensor_shape.dims() != request_shape.dims()) {
-        error = true;
-        error_stream << "Mismatched allgather tensor shapes: rank " << tensor_shape.dims() << " vs "
-                     << request_shape.dims();
-      }
-
-      for (int dim = 1; dim < tensor_shape.dims() && !error; dim++) {
-        if (tensor_shape.dim_size(dim) != request_shape.dim_size(dim)) {
-          error = true;
-          error_stream << "Mismatched allgather tensor shapes: " << dim << "-th dimension "
-                       << tensor_shape.dim_size(dim) << " vs " << request_shape.dim_size(dim);
-        }
-      }
-
-      tensor_sizes[requests[i].msg().request_rank()] = request_shape.dim_size(0);
-    }
+    tensor_sizes =
+        GatherFirstRankSizes(absl::Span<RequestMessage>(it->second.data(), it->second.size()), error, error_stream);
   }
 
   // Clear all queued up requests for this tensor.
@@ -210,8 +223,6 @@ void PerformCollectiveOp(TensorTable& tensor_table,
           response_type == message::ResponseType_ERROR);
 
     record = it->second;
-
-    // tensor_table.erase(it);
   }
 
   Status status;
@@ -231,12 +242,26 @@ void PerformCollectiveOp(TensorTable& tensor_table,
     }
   } else if (response_type == message::ResponseType_ALLGATHER) {
     LOG(INFO) << "Run MPI ALLGATHER ...";
+
+    std::vector<int32_t> first_rank_sizes(record.sizes_vec.size());
+    for (int i = 0; i < record.sizes_vec.size(); i++) first_rank_sizes[i] = record.sizes_vec[i];
+
+    // Allocate output tensor for that the Allgather output's shape is known now.
+    TensorShape shape = record.in_tensor->shape();
+    shape.RemoveDim(0);
+    shape.InsertDim(0, std::accumulate(record.sizes_vec.begin(), record.sizes_vec.end(), 1, [](int64_t a, int64_t b) {
+                      return a + b;
+                    }));
+    CHECK(record.op_context->allocate_output(0, shape, &record.out_tensor).ok());
+
     switch (dtype) {
       case message::DataType_TF_INT32:
-        status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
+        status = AllgathervCpu<int32_t>(
+            record.in_tensor, absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()), record.out_tensor);
         break;
       case message::DataType_TF_FLOAT32:
-        status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
+        status = AllgathervCpu<float>(
+            record.in_tensor, absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()), record.out_tensor);
         break;
     }
   } else if (response_type == message::ResponseType_ERROR) {
@@ -296,6 +321,9 @@ void BackgroundThreadLoop() {
 
           if (msg->response_type() == message::ResponseType_ALLREDUCE) {
             LOG(INFO) << "#rank-" << mpi_rank() << " get response for [" << msg->tensor_name()->str() << "]";
+            // Assign sizes_vec for Allgather
+            CollectiveState::Global().tensor_table[msg->tensor_name()->str()].sizes_vec.assign(
+                msg->tensor_sizes()->begin(), msg->tensor_sizes()->end());
             PerformCollectiveOp(CollectiveState::Global().tensor_table,
                                 msg->response_type(),
                                 msg->tensor_name()->str(),
@@ -348,9 +376,22 @@ void BackgroundThreadLoop() {
           LOG(INFO) << "coordinator send response to " << head.client_id;
           RpcServer::Global().SendResponse(head, response.GetBuffer(), response.GetSize());
         }
-        tensor_requests[name].clear();
 
         std::string error_message = response.msg().error_message() ? response.msg().error_message()->str() : "";
+
+        std::stringstream error_stream;
+        bool error{};
+        auto requests_iter = CollectiveState::Global().message_table->find(name);
+        CHECK(requests_iter != CollectiveState::Global().message_table->end());
+        auto first_rank_sizes =
+            GatherFirstRankSizes(absl::Span<RequestMessage>(requests_iter->second.data(), requests_iter->second.size()),
+                                 error,
+                                 error_stream);
+        CollectiveState::Global().tensor_table[name].sizes_vec = first_rank_sizes;
+        CHECK(!error) << error_stream.str();
+
+        tensor_requests[name].clear();
+
         PerformCollectiveOp(CollectiveState::Global().tensor_table,
                             response.msg().response_type(),
                             response.msg().tensor_name()->str(),
