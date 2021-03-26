@@ -60,7 +60,6 @@ Status AllreduceCpu(const Tensor* input, Tensor* output, CollectiveOpKind op) {
   return suc ? Status::OK() : tensorflow::errors::FailedPrecondition("MPI_Allreduce failed");
 }
 
-// TODO(Superjomn) Replace with allgatherv ?
 template <typename dtype>
 Status AllgatherCpu(const Tensor* input, Tensor* output) {
   // TODO(Superjomn) try the inplace way.
@@ -78,7 +77,7 @@ Status AllgatherCpu(const Tensor* input, Tensor* output) {
 template <typename T>
 Status AllgathervCpu(const Tensor* input, absl::Span<int> first_ranks, Tensor* output) {
   int first_rank = std::accumulate(first_ranks.begin(), first_ranks.end(), 0, [](int a, int b) { return a + b; });
-  CHECK_EQ(first_ranks.size(), mpi_size());
+  CHECK_EQ(first_ranks.size(), mpi_size()) << "first_ranks not match mpi_size";
   if (input->dims() != output->dims()) {
     return tensorflow::errors::FailedPrecondition("input and output tensors shape not match");
   }
@@ -94,6 +93,7 @@ Status AllgathervCpu(const Tensor* input, absl::Span<int> first_ranks, Tensor* o
     }
     elems_of_remain_rank *= input->dim_size(i);
   }
+
   if (input->dim_size(0) != first_ranks[mpi_rank()]) {
     return tensorflow::errors::FailedPrecondition(
         "input and first_ranks not match %d vs %d", input->dim_size(0), first_ranks[mpi_rank()]);
@@ -101,19 +101,24 @@ Status AllgathervCpu(const Tensor* input, absl::Span<int> first_ranks, Tensor* o
 
   std::vector<int> disps(first_ranks.size(), 0);
   for (int i = 1; i < disps.size(); i++) {
-    disps[i] = disps[i - 1] + elems_of_remain_rank * first_ranks[i];
+    disps[i] = disps[i - 1] + elems_of_remain_rank * first_ranks[i - 1];
+  }
+
+  std::vector<int> counts(mpi_size(), 0);
+  for (int i = 0; i < mpi_size(); i++) {
+    counts[i] = first_ranks[i] * elems_of_remain_rank;
   }
 
   bool suc = MPI_Allgatherv(input->data(),
                             input->NumElements(),
                             mpi_type_trait<T>::type(),
                             output->data(),
-                            &first_ranks[0],
-                            disps.data(),
+                            &counts[0],
+                            &disps[0],
                             mpi_type_trait<T>::type(),
                             mpi_comm()) == 0;
 
-  return suc ? Status::OK() : tensorflow::errors::FailedPrecondition("MPI_Allgather failed");
+  return suc ? Status::OK() : tensorflow::errors::FailedPrecondition("MPI_Allgatherv failed");
 }
 
 template <typename T>

@@ -9,4 +9,7 @@ mpi_test(test_collective_allreduce 5)
 cc_binary(test_collective_allgather SRCS utils_test.cc DEPS tipscore CXX_FLAGS -DTEST_ALLGATHER)
 mpi_test(test_collective_allgather 3)
 
+cc_binary(test_collective_allgatherv SRCS utils_test.cc DEPS tipscore CXX_FLAGS -DTEST_ALLGATHERV)
+mpi_test(test_collective_allgatherv 3)
+
 cc_binary(test_coordinator SRCS coordinator_test.cc DEPS tipscore)

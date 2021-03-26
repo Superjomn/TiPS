@@ -66,19 +66,46 @@ void TestAllgatherOp() {
 void TestAllgathervOp() {
   MPI_Init(nullptr, nullptr);
 
-  Tensor tensor(DataType::DT_FLOAT, TensorShape({2, 4}));
-
-  Tensor first_rank{mpi_rank() + 1};
-
-  Tensor output(DataType::DT_FLOAT, TensorShape({*first_rank.scalar<int32_t>().data(), 4}));
+  Tensor first_rank(DataType::DT_INT32, TensorShape({1}));
+  static_cast<int*>(first_rank.data())[0] = mpi_rank() + 1;
 
   Tensor first_ranks(DataType::DT_INT32, TensorShape({mpi_size()}));
 
+  Tensor tensor(DataType::DT_FLOAT, TensorShape({mpi_rank() + 1, 4}));
+  for (int i = 0; i < tensor.NumElements(); i++) {
+    static_cast<float*>(tensor.data())[i] = mpi_rank() + 1;
+  }
+
+  LOG(INFO) << "first_rank: " << first_rank.DebugString();
+
   // allgather the size
   CHECK(AllgatherCpu<int32_t>(&first_rank, &first_ranks).ok());
+  LOG(INFO) << "first_ranks: " << first_ranks.DebugString();
+
+  int total_first_ranks = 0;
+  for (int i = 0; i < mpi_size(); i++) {
+    total_first_ranks += static_cast<int*>(first_ranks.data())[i];
+  }
+
+  Tensor output(DataType::DT_FLOAT, TensorShape({total_first_ranks, 4}));
+
+  LOG(INFO) << "tensor: " << tensor.DebugString(10);
 
   // allgather the tensor
-  // TODO
+  CHECK(
+      AllgathervCpu<float>(&tensor, absl::Span<int>(static_cast<int*>(first_ranks.data()), mpi_size()), &output).ok());
+
+  LOG(INFO) << "output: " << output.DebugString(40);
+
+  // Check the result.
+  int stride     = 4;
+  int pre_offset = 0;
+  for (int i = 0; i < mpi_size(); i++) {
+    for (int j = 0; j < stride * i + 1; j++) {
+      CHECK_NEAR(static_cast<float*>(output.data())[pre_offset + j], i + 1, 1e-5);
+    }
+    pre_offset += stride * (i + 1);
+  }
 
   MPI_Finalize();
 }
@@ -93,6 +120,10 @@ int main() {
 
 #ifdef TEST_ALLGATHER
   tips::collective::TestAllgatherOp();
+#endif
+
+#ifdef TEST_ALLGATHERV
+  tips::collective::TestAllgathervOp();
 #endif
 
   return 0;
