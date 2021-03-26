@@ -37,6 +37,7 @@ class TensorFlowTests(tf.test.TestCase):
             tensor = self._random_uniform(
                 [17] * dim, -100, 100, dtype=tf.float32)
             summed = tips_ops.allreduce(tensor)
+            print(summed)
 
     def _random_uniform(self, *args, **kwargs):
         if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):
