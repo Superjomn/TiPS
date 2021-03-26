@@ -1,4 +1,5 @@
 #pragma once
+#include <absl/types/span.h>
 #include <mpi.h>
 #include <tensorflow/core/framework/op_kernel.h>
 #include <tensorflow/core/framework/shape_inference.h>
@@ -75,7 +76,7 @@ Status AllgatherCpu(const Tensor* input, Tensor* output) {
 }
 
 template <typename T>
-Status AllgathervCpu(const Tensor* input, const std::vector<int>& first_ranks, Tensor* output) {
+Status AllgathervCpu(const Tensor* input, absl::Span<int> first_ranks, Tensor* output) {
   int first_rank = std::accumulate(first_ranks.begin(), first_ranks.end(), 0, [](int a, int b) { return a + b; });
   CHECK_EQ(first_ranks.size(), mpi_size());
   if (input->dims() != output->dims()) {

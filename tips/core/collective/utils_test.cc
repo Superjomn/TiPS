@@ -1,5 +1,6 @@
 #include "tips/core/collective/utils.h"
 
+#include <absl/types/span.h>
 #include "tips/core/mpi/tips_mpi.h"
 
 namespace tips {
@@ -37,28 +38,11 @@ void TestAllreduceOp() {
 void TestAllgatherOp() {
   MPI_Init(nullptr, nullptr);
 
-  // int first_rank = mpi_rank() + 1;
-
   TensorShape shape({2, 3});
   Tensor tensor(DataType::DT_FLOAT, shape);
   for (int i = 0; i < tensor.NumElements(); i++) {
     static_cast<float*>(tensor.data())[i] = mpi_rank();
   }
-
-  /*
-  std::vector<int64_t> sizes(mpi_size());
-  sizes[mpi_rank()] = first_rank;
-
-  ZCHECK(MPI_Allgather(&sizes[mpi_rank()], 1, MPI_INT64_T, &sizes[0], 1, MPI_INT64_T, mpi_comm()));
-
-  int total = 0;
-  for (int v : sizes) {
-    LOG(INFO) << "v: " << v;
-    total += v;
-  }
-
-  LOG(INFO) << "total size: " << total;
-   */
 
   Tensor output(DataType::DT_FLOAT, TensorShape({2 * mpi_size(), 3}));
   CHECK(collective::AllgatherCpu<float>(&tensor, &output).ok());
@@ -67,7 +51,34 @@ void TestAllgatherOp() {
     LOG(INFO) << output.DebugString(100);
   }
 
-  mpi_barrier();
+  // Check result.
+  auto* output_data = static_cast<float*>(output.data());
+  for (int i = 0; i < mpi_size(); i++) {
+    auto* slice_data = &output_data[i * tensor.NumElements()];
+    for (int j = 0; j < tensor.NumElements(); j++) {
+      CHECK_NEAR(slice_data[j], i, 1e-5);
+    }
+  }
+
+  MPI_Finalize();
+}
+
+void TestAllgathervOp() {
+  MPI_Init(nullptr, nullptr);
+
+  Tensor tensor(DataType::DT_FLOAT, TensorShape({2, 4}));
+
+  Tensor first_rank{mpi_rank() + 1};
+
+  Tensor output(DataType::DT_FLOAT, TensorShape({*first_rank.scalar<int32_t>().data(), 4}));
+
+  Tensor first_ranks(DataType::DT_INT32, TensorShape({mpi_size()}));
+
+  // allgather the size
+  CHECK(AllgatherCpu<int32_t>(&first_rank, &first_ranks).ok());
+
+  // allgather the tensor
+  // TODO
 
   MPI_Finalize();
 }

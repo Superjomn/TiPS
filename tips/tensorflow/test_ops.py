@@ -24,11 +24,11 @@ class TensorFlowTests(tf.test.TestCase):
             return sess.run(tensors)
 
     def test_tips_rank_op(self):
-        rank = self.evaluate(tips_ops.rank())
+        rank = self.evaluate(tips_ops.rank_op())
         print('rank', rank)
 
     def test_tips_size_op(self):
-        size = self.evaluate(tips_ops.size())
+        size = self.evaluate(tips_ops.size_op())
         print('size', size)
 
     def test_tips_allreduce_cpu(self):
@@ -36,7 +36,7 @@ class TensorFlowTests(tf.test.TestCase):
         with tf.device("/cpu:0"):
             tensor = self._random_uniform(
                 [17] * dim, -100, 100, dtype=tf.float32)
-            summed = tips_ops.allreduce(tensor)
+            summed = tips_ops.allreduce_op(tensor)
             print(summed)
 
     def _random_uniform(self, *args, **kwargs):

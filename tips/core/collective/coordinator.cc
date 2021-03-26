@@ -232,14 +232,12 @@ void PerformCollectiveOp(TensorTable& tensor_table,
   } else if (response_type == message::ResponseType_ALLGATHER) {
     LOG(INFO) << "Run MPI ALLGATHER ...";
     switch (dtype) {
-      switch (dtype) {
-        case message::DataType_TF_INT32:
-          status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
-          break;
-        case message::DataType_TF_FLOAT32:
-          status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
-          break;
-      }
+      case message::DataType_TF_INT32:
+        status = AllgatherCpu<int32_t>(record.in_tensor, record.out_tensor);
+        break;
+      case message::DataType_TF_FLOAT32:
+        status = AllgatherCpu<float>(record.in_tensor, record.out_tensor);
+        break;
     }
   } else if (response_type == message::ResponseType_ERROR) {
     status = tensorflow::errors::FailedPrecondition(error_msg);

@@ -42,6 +42,7 @@ include(cmake/external/openmpi.cmake)
 include(cmake/external/flatbuffers.cmake)
 include(cmake/external/boost.cmake)
 include(cmake/external/tensorflow.cmake)
+include(cmake/external/absl.cmake)
 
 find_package(Threads REQUIRED)
 ## load in pkg-config support
@@ -75,6 +76,6 @@ endfunction()
 
 add_subdirectory(tips)
 
-cc_library(tipscore SRCS ${core_src} DEPS boost fbs_headers_dummy SHARED)
+cc_library(tipscore SRCS ${core_src} DEPS boost fbs_headers_dummy absl_base SHARED)
 target_compile_definitions(tipscore PRIVATE _GLIBCXX_USE_CXX11_ABI=0)
 target_link_libraries(tipscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY} ${Tensorflow_LIBRARIES} fbs_headers_dummy)

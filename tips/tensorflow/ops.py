@@ -38,7 +38,7 @@ def _allreduce(tensor: tf.Tensor, name=None):
     return MPI_LIB.tips_allreduce(tensor, name=name)
 
 
-def size(name=None):
+def size_op(name=None):
     """An op which returns the number of MPI processes."""
     return MPI_LIB.mpi_size(name=name)
 
@@ -46,7 +46,7 @@ def size(name=None):
 ops.NotDifferentiable("MPISize")
 
 
-def rank(name=None):
+def rank_op(name=None):
     """An op which returns the number of MPI processes."""
     return MPI_LIB.mpi_rank(name=name)
 
@@ -54,7 +54,7 @@ def rank(name=None):
 ops.NotDifferentiable("MPIRank")
 
 
-def allreduce(tensor, name=None):
+def allreduce_op(tensor, name=None):
     """An op which sums an input tensor over all the MPI processes."""
     return MPI_LIB.mpi_allreduce(tensor, name=name)
 

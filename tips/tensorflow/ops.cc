@@ -1,5 +1,8 @@
 #include "tips/tensorflow/ops.h"
 
+#include "tensorflow/core/framework/op.h"
+#include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/framework/shape_inference.h"
 #include "tips/core/collective/coordinator.h"
 #include "tips/core/mpi/tips_mpi.h"
 
@@ -131,6 +134,55 @@ Arguments
 Output
     sum:      A tensor with the same shape as `tensor`, summed accross all MPI processes.
 )doc");
+
+std::string GetNameWithoutScope(const std::string& name) {
+  auto pos = name.find_last_of('/');
+  if (pos != std::string::npos) {
+    return name.substr(pos + 1);
+  }
+  return name;
+}
+
+#define CPU_DEVICE_ID -1
+
+int GetDeviceID(OpKernelContext* context) {
+  int device = CPU_DEVICE_ID;
+  if (context->device() && context->device()->tensorflow_gpu_device_info()) {
+    device = context->device()->tensorflow_gpu_device_info()->gpu_id;
+  }
+  return device;
+}
+
+class MpiBroadcastOp : public AsyncOpKernel {
+ public:
+  explicit MpiBroadcastOp(OpKernelConstruction* context) : AsyncOpKernel(context) {
+    OP_REQUIRES_OK(context, context->GetAttr("root_rank", &root_rank_));
+    OP_REQUIRES_OK(context, context->GetAttr("ignore_name_scope", &ignore_name_scope_));
+  }
+
+  void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
+    OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
+
+    std::string node_name = name();
+    if (ignore_name_scope_) {
+      node_name = GetNameWithoutScope(node_name);
+    }
+
+    auto device = GetDeviceID(context);
+    auto tensor = context->input(0);
+    Tensor* output{};
+    if (mpi_rank() == root_rank_) {
+      context->set_output(0, tensor);
+    } else {
+      OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, tensor.shape(), &output), done);
+    }
+
+    // TODO
+  }
+
+  int root_rank_;
+  bool ignore_name_scope_;
+};
 
 }  // namespace collective
 }  // namespace tips
