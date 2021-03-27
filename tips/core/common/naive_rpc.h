@@ -57,7 +57,7 @@ class RpcService {
   explicit RpcService(RpcCallback callback);
 
   ~RpcService() {
-    MPI_Barrier(mpi_comm());
+    mpi_barrier();
     CHECK_EQ(request_counter_, 0);
   }
 

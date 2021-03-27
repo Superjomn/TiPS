@@ -122,4 +122,9 @@ inline int mpi_size() {
   return size;
 }
 
+std::string mpi_rank_repr();
+
 }  // namespace tips
+
+#define MPI_LOG LOG(INFO) << ::tips::mpi_rank_repr() << " "
+#define MPI_WARN LOG(WARNING) << ::tips::mpi_rank_repr() << " "

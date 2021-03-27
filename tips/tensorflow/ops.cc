@@ -96,6 +96,7 @@ class MpiAllreduceOp : public AsyncOpKernel {
     record.in_tensor  = input_tensor;
     record.out_tensor = output_tensor;
     record.on_gpu     = false;
+    record.rank       = mpi_rank();
     record.dtype      = message::DataType_TF_UNK;
     OP_REQUIRES_OK_ASYNC(context, TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype), done);
 
@@ -194,8 +195,6 @@ class MpiAllgatherOp : public AsyncOpKernel {
   void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
     OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
     const auto* input_tensor = &context->input(0);
-    Tensor* output_tensor;
-    OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, input_tensor->shape(), &output_tensor), done);
 
     LOG(INFO) << "running op: " << name();
     OpRecord record;
@@ -204,6 +203,7 @@ class MpiAllgatherOp : public AsyncOpKernel {
     record.in_tensor  = input_tensor;
     record.out_tensor = nullptr;  // Output shape is not known now.
     record.on_gpu     = false;
+    record.rank       = mpi_rank();
     record.dtype      = message::DataType_TF_UNK;
 
     OP_REQUIRES_OK_ASYNC(context, TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype), done);
@@ -226,7 +226,7 @@ class MpiAllgatherOp : public AsyncOpKernel {
 
 REGISTER_KERNEL_BUILDER(Name("MPIAllgather").Device(DEVICE_CPU), MpiAllgatherOp<CPUDevice>);
 
-REGISTER_OP("MpiAllgather")
+REGISTER_OP("MPIAllgather")
     .Attr("T: {uint8, int8, uint16, int16, int32, int64, float16, float32, float64, bool}")
     .Attr("ignore_name_scope: bool = False")
     .Input("tensor: T")

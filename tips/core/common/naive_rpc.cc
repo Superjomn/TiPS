@@ -9,7 +9,7 @@ RpcServer::~RpcServer() {
 }
 
 RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback) {
-  LOG(INFO) << "Add RPC service [" << type << "]";
+  MPI_LOG << "Add RPC service [" << type << "]";
   auto *new_service = new RpcService(std::move(callback));
   CHECK(!services_.count(type)) << "duplicate add service [" << type << "]";
   services_.emplace(type, new_service);
@@ -184,6 +184,8 @@ void RpcServer::Finalize() {
     delete item.second;
     item.second = nullptr;
   }
+
+  mpi_barrier();
 }
 
 void RpcServer::Initialize() {
@@ -219,7 +221,7 @@ void RpcServer::Initialize() {
     CHECK_EQ(MPI_Allgather(MPI_IN_PLACE, 0, MPI_INT, &ports[0], 1, MPI_INT, mpi_comm()), 0);
 
     for (int i = 0; i < mpi_size(); i++) {
-      LOG(INFO) << "ip " << i << " " << MpiContext::Global().ip(i);
+      MPI_LOG << "ip " << i << " " << MpiContext::Global().ip(i);
       CHECK_EQ(ignore_signal_call(zmq_connect,
                                   senders_[i],
                                   StringFormat("tcp://%s:%d", MpiContext::Global().ip(i).c_str(), ports[i]).c_str()),
@@ -274,7 +276,7 @@ RpcService::RpcService(RpcCallback callback) : callback_(std::move(callback)) {
 
   if (mpi_rank() == 0) {
     for (int i = 0; i < mpi_size(); i++) {
-      LOG(INFO) << i << "-service: " << remote_service_ptrs_[i];
+      MPI_LOG << i << "-service: " << remote_service_ptrs_[i];
     }
   }
 }

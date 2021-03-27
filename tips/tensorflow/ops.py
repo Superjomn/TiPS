@@ -60,3 +60,11 @@ def allreduce_op(tensor, name=None):
 
 
 ops.NotDifferentiable("MPIAllreduce")
+
+
+def allgather_op(tensor, name=None):
+    """An op which broadcast an input tensor over all the MPI processes."""
+    return MPI_LIB.mpi_allgather(tensor, name=name)
+
+
+ops.NotDifferentiable("MPIAllgather")

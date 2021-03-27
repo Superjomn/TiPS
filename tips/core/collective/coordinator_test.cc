@@ -7,7 +7,7 @@ namespace collective {
 
 using namespace tensorflow;
 
-void Test() {
+void TestAllreduce() {
   tips_init();
 
   TensorShape shape({2, 4});
@@ -44,11 +44,43 @@ void Test() {
   tips_shutdown();
 }
 
+void TestAllgather() {
+  tips_init();
+
+  TensorShape shape({2, 4});
+  Tensor tensor(DataType::DT_FLOAT, shape);
+
+  for (int i = 0; i < tensor.NumElements(); i++) {
+    static_cast<float*>(tensor.data())[i] = i * 0.1;
+  }
+
+  OpRecord record;
+  record.name       = "a";
+  record.callback   = [&](StatusOr<tensorflow::Tensor> x) {};
+  record.in_tensor  = &tensor;
+  record.dtype      = message::DataType_TF_FLOAT32;
+  record.on_gpu     = false;
+  record.rank       = mpi_rank();
+  record.sizes_vec  = {2, 4};
+  record.op_context = nullptr;
+
+  EnqueueTensorCollective(record, message::RequestType_ALLGATHER);
+
+  mpi_barrier();
+  tips_shutdown();
+}
+
 }  // namespace collective
 }  // namespace tips
 
 int main() {
-  tips::collective::Test();
+#ifdef TEST_ALLREDUCE
+  tips::collective::TestAllreduce();
+#endif
+
+#ifdef TEST_ALLGATHER
+  tips::collective::TestAllgather();
+#endif
 
   return 0;
 }

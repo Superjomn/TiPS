@@ -1,5 +1,7 @@
 #include "tips/core/mpi/tips_mpi.h"
 
+#include <absl/strings/str_format.h>
+
 #include "tips/core/common/common.h"
 
 namespace tips {
@@ -47,5 +49,7 @@ int mpi_rank() {
   CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);
   return rank;
 }
+
+std::string mpi_rank_repr() { return absl::StrFormat("#rank-[%d/%d]", mpi_rank(), mpi_size()); }
 
 }  // namespace tips

@@ -20,19 +20,19 @@ void tips_init() {
 
 void tips_shutdown() {
   using namespace std::chrono_literals;
+  MPI_WARN << "to run tips_shutdown";
 
-  std::this_thread::sleep_for(1000ms);
-  LOG(WARNING) << "Shutdown collective state";
+  mpi_barrier();
+  MPI_WARN << "Shutdown collective state";
   collective::CollectiveState::Global().Finalize();
 
-  std::this_thread::sleep_for(1000ms);
-  LOG(WARNING) << "Shutdown global RPC server";
+  mpi_barrier();
+  MPI_WARN << "Shutdown global RPC server";
   RpcServer::Global().Finalize();
 
-  LOG(WARNING) << "Shutdown MPI";
+  mpi_barrier();
+  MPI_WARN << "Shutdown MPI";
   MpiContext::Global().Finalize();
-
-  LOG(WARNING) << "TIPS service is shutdown";
 }
 
 bool tips_is_initialize() { return RpcServer::Global().initialized() && MpiContext::Global().IsInitialized(); }

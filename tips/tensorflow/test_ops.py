@@ -35,9 +35,18 @@ class TensorFlowTests(tf.test.TestCase):
         dim = 3
         with tf.device("/cpu:0"):
             tensor = self._random_uniform(
-                [17] * dim, -100, 100, dtype=tf.float32)
+                [3] * dim, -100, 100, dtype=tf.float32)
             summed = tips_ops.allreduce_op(tensor)
             print(summed)
+
+    def test_tips_allgather_cpu(self):
+        rank = self.evaluate(tips_ops.rank_op())
+
+        dim = 3
+        with tf.device("/cpu:0"):
+            tensor = tf.constant(rank, tf.float32, [rank + 1, 3, 3])
+            gathered = tips_ops.allgather_op(tensor)
+            print(gathered)
 
     def _random_uniform(self, *args, **kwargs):
         if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):

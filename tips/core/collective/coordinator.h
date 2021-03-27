@@ -30,22 +30,6 @@ RequestMessage CreateRequestMessage(int request_rank,
                                     const std::string& tensor_name,
                                     const std::vector<int64_t>& tensor_shape);
 
-/**
- * A wrapper to hold the RequestMessage flatbuffers object. It doesn't hold the data, leave the underlying buffer
- * managed externally.
- */
-struct RequestMessageCloned {
-  explicit RequestMessageCloned(const uint8_t* buffer) : buffer_(buffer) {}
-
-  const collective::RequestMessage& msg() const {
-    CHECK(buffer_);
-    return *flatbuffers::GetRoot<collective::RequestMessage>(buffer_);
-  }
-
- private:
-  const uint8_t* buffer_;
-};
-
 struct OpRecord {
   // The rank performing this piece of op.
   int rank{-1};
@@ -58,7 +42,7 @@ struct OpRecord {
   message::DataType dtype;
 
   // The input tensor.
-  const Tensor* in_tensor;
+  const Tensor* in_tensor{};
 
   Tensor temp_tensor;
 
@@ -66,7 +50,7 @@ struct OpRecord {
   std::vector<int64_t> sizes_vec;
 
   // The output tensor.
-  Tensor* out_tensor;
+  Tensor* out_tensor{};
 
   bool on_gpu{};
 
@@ -124,7 +108,7 @@ struct CollectiveState {
  * Store the RequestMessage for a name and return whether the total count of RequestMessages for that tensor is now
  * equal to the MPI size (and thus we are ready to reduce the tensor).
  */
-bool IncreTensorCount(MessageTable& table, RequestMessage&& msg, int mpi_size);
+bool IncreTensorCount(MessageTable& message_table, RequestMessage&& msg, int mpi_size);
 
 ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string& name);
 
