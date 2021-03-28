@@ -68,3 +68,11 @@ def allgather_op(tensor, name=None):
 
 
 ops.NotDifferentiable("MPIAllgather")
+
+
+def broadcast_op(tensor, root_rank=0, name=None):
+    """An op which broadcast an input tensor over all the MPI processes."""
+    return MPI_LIB.mpi_broadcast(tensor, name=name, root_rank=root_rank)
+
+
+ops.NotDifferentiable("MPIBroadcast")

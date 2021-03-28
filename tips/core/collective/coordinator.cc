@@ -128,7 +128,7 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
 
   // If we are doing an allreduce, check that all the tensor shape are identical.
   tensorflow::TensorShape tensor_shape;
-  if (operation_type == message::RequestType_ALLREDUCE) {
+  if (operation_type == message::RequestType_ALLREDUCE || operation_type == message::RequestType_BROADCAST) {
     for (int64_t d : *requests[0].msg().tensor_shape()) {
       tensor_shape.AddDim(d);
     }
@@ -139,8 +139,8 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
       }
       if (shape != tensor_shape) {
         error = true;
-        error_stream << "Mismatched allreduce tensor shapes: " << tensor_shape.DebugString() << " vs "
-                     << shape.DebugString();
+        error_stream << "Mismatched " << (operation_type == message ::RequestType_BROADCAST ? "broadcast" : "allreduce")
+                     << " tensor shapes: " << tensor_shape.DebugString() << " vs " << shape.DebugString();
       }
     }
   }
@@ -153,9 +153,6 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
     tensor_rank0_sizes =
         GatherFirstRankSizes(absl::Span<RequestMessage>(it->second.data(), it->second.size()), error, error_stream);
   }
-
-  // Clear all queued up requests for this tensor.
-  // table.erase(name);
 
   // construct response message
   {
@@ -176,6 +173,10 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
     } else if (operation_type == message::RequestType_ALLREDUCE) {
       CHECK(!tensor_rank0_sizes.empty()) << "Tensor size is empty";
       response.add_response_type(message::ResponseType_ALLREDUCE);
+    } else if (operation_type == message::RequestType_BROADCAST) {
+      response.add_response_type(message::ResponseType_BROADCAST);
+    } else {
+      LOG(FATAL) << "Not supported request type: " << operation_type;
     }
 
     builder.Finish(response.Finish());
@@ -235,16 +236,13 @@ void PerformCollectiveOp(OpRecord* op_record,
                          const std::string& error_msg) {
   MPI_LOG << "Perform collective!";
   CHECK(response_type == message::ResponseType_ALLREDUCE || response_type == message::ResponseType_ALLGATHER ||
-        response_type == message::ResponseType_ERROR);
+        response_type == message::ResponseType_BROADCAST || response_type == message::ResponseType_ERROR);
 
   Status status;
   auto dtype = op_record->dtype;
 
   if (response_type == message::ResponseType_ALLREDUCE) {
-    if (!op_record->out_tensor) {
-      auto status = op_record->op_context->allocate_output(0, op_record->in_tensor->shape(), &op_record->out_tensor);
-      OP_REQUIRES_OK_ASYNC(op_record->op_context, status, [&] { op_record->callback(status); });
-    }
+    CHECK(op_record->out_tensor);
     MPI_LOG << "Run MPI ALLREDUCE ...";
     switch (dtype) {
       case message::DataType_TF_INT32:
@@ -254,6 +252,17 @@ void PerformCollectiveOp(OpRecord* op_record,
       case message::DataType_TF_FLOAT32:
         MPI_LOG << "Allreduce float32 ...";
         status = AllreduceCpu<float>(op_record->in_tensor, op_record->out_tensor, CollectiveOpKind::SUM);
+        break;
+    }
+  } else if (response_type == message::ResponseType_BROADCAST) {
+    CHECK(op_record->out_tensor);
+    switch (dtype) {
+      case message::DataType_TF_INT32:
+        // NOTE root_rank should be passed in.
+        status = BroadcastCpu<int32_t>(op_record->out_tensor, 0);
+        break;
+      case message::DataType_TF_FLOAT32:
+        status = BroadcastCpu<float>(op_record->out_tensor, 0);
         break;
     }
   } else if (response_type == message::ResponseType_ALLGATHER) {
@@ -368,7 +377,8 @@ void BackgroundThreadLoop() {
             tensor_table[tensor_name].sizes_vec.assign(msg->tensor_sizes()->begin(), msg->tensor_sizes()->end());
           }
 
-          CHECK(response_type == message::ResponseType_ALLGATHER || response_type == message::ResponseType_ALLREDUCE)
+          CHECK(response_type == message::ResponseType_ALLGATHER || response_type == message::ResponseType_ALLREDUCE ||
+                response_type == message::ResponseType_BROADCAST)
               << "Unsupported response_type found: " << response_type;
 
           OpRecord* op_record = CollectiveState::Global().LookupOpRecordGuarded(tensor_name);
