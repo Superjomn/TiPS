@@ -1,11 +1,45 @@
 import tips.tensorflow as tips
 import tensorflow as tf
-from tips.tensorflow.gradient_aggregation import LocalGradientAggretationHelper
+from tips.tensorflow.gradient_aggregation import LocalGradientAggregationHelper
+from tips.tensorflow.gradient_aggregation_eager import LocalGradientAggregationHelperEager
 from tips.tensorflow.ops import rank_op
 from tensorflow import keras
 from distutils.version import LooseVersion
 
 _PRE_TF_2_4_0 = LooseVersion(tf.__version__) < LooseVersion('2.4.0')
+
+
+def DistributedOptimizer(optimizer,
+                         name=None,
+                         device_dense='',
+                         device_sparse='',
+                         backward_passes_per_step=1,
+                         average_aggregated_gradients=False,
+                         sparse_as_dense=False,
+                         op='Average'):
+    """
+    An optimizer that wraps another keras.optimizers.Optimizer, using an allreduce to average gradient
+    values before applying gradients to model weights.
+    :param optimizer:
+    :param name:
+    :param device_dense:
+    :param device_sparse:
+    :param sparse_as_dense:
+    :param op:
+    :return:
+    """
+    if op != 'Average' and op != 'Sum':
+        raise ValueError('Op currently only supports Average and Sum.')
+
+    return create_distributed_optimizer(
+        optimizer=optimizer,
+        name=name,
+        device_dense=device_dense,
+        device_sparse=device_sparse,
+        backward_passes_per_step=backward_passes_per_step,
+        average_aggregated_gradients=average_aggregated_gradients,
+        sparse_as_dense=sparse_as_dense,
+        op=op)
 
 
 def create_distributed_optimizer(optimizer,
@@ -29,16 +63,21 @@ def create_distributed_optimizer(optimizer,
             self._agg_helper = None
             if backward_passes_per_step > 1:
                 if tips.utils.executing_eagerly():
-                    raise NotImplementedError("eager mode is not supported")
+                    self._agg_helper = LocalGradientAggregationHelperEager(
+                        backward_passes_per_step=backward_passes_per_step,
+                        allreduce_func=self._allreduce_grads,
+                        sparse_as_dense=sparse_as_dense,
+                        average_aggregated_gradients=
+                        average_aggregated_gradients)
                 else:
-                    self._agg_helper = LocalGradientAggretationHelper(
+                    self._agg_helper = LocalGradientAggregationHelper(
                         backwrod_passes_per_step=backward_passes_per_step,
                         allreduce_func=self._allreduce_grads,
                         sparse_as_dense=sparse_as_dense,
                         average_aggregated_gradients_by_passes=
                         average_aggregated_gradients,
                         rank=tips.tips_basics.rank(),
-                        optimizer_type=LocalGradientAggretationHelper.
+                        optimizer_type=LocalGradientAggregationHelper.
                         _OPTIMIZER_TYPE_KERAS)
                     super(self.__class__, self).__init__(**kwargs)
 
@@ -110,7 +149,7 @@ def create_distributed_optimizer(optimizer,
                dict(_DistributedOptimizer.__dict__))
 
     config = optimizer.get_config()
-    if not _PRE_TF_2_4_0 and issubclass(
+    if not _PRE_TF_2_4_0 and hasattr(optimizer, 'lr') and issubclass(
             optimizer.lr.__class__,
             keras.optimizers.schedules.LearningRateSchedule):
         lr_cls = type(optimizer.lr.__class__.__name__,

@@ -108,4 +108,15 @@ def DistributedOptimizer(optimizer,
     :param average_aggregated_gradients:
     :return:
     """
-    pass
+    assert optimizer is tf.keras.optimizers.Optimizer, "legancy optimizer is not supported"
+    if op == "Adasum":
+        raise ValueError("op == Adasum is not supported yet with Keras")
+
+    import tips.tensorflow.keras as _keras
+    return _keras.DistributedOptimizer(
+        optimizer=optimizer,
+        name=name,
+        device_dense=device_dense,
+        device_sparse=device_sparse,
+        sparse_as_dense=sparse_as_dense,
+    )
