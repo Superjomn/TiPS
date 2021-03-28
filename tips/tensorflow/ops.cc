@@ -208,11 +208,6 @@ class MpiAllgatherOp : public AsyncOpKernel {
 
     OP_REQUIRES_OK_ASYNC(context, TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype), done);
 
-    const size_t temp_size = (input_tensor->NumElements() + mpi_size() - 1) / mpi_size();
-    TensorShape temp_shape;
-    temp_shape.AddDim(temp_size);
-    OP_REQUIRES_OK_ASYNC(context, context->allocate_temp(input_tensor->dtype(), temp_shape, &record.temp_tensor), done);
-
     record.callback = [done, context](StatusOr<Tensor> status) {
       context->SetStatus(status.status());
       done();
