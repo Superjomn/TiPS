@@ -3,14 +3,15 @@ namespace tips.collective.message;
 enum RequestType : short {
   ALLREDUCE = 0,
   ALLGATHER = 1,
+  BROADCAST = 2,
 }
 
 enum ResponseType : short {
+  ERROR = -2,
+  SHUTDOWN = -1,
   ALLREDUCE = 0,
   ALLGATHER = 1,
-  ERROR = 2,
-  DONE = 3,
-  SHUTDOWN = 4,
+  BROADCAST = 2,
 }
 
 enum DataType : short {

@@ -154,37 +154,6 @@ int GetDeviceID(OpKernelContext* context) {
   return device;
 }
 
-class MpiBroadcastOp : public AsyncOpKernel {
- public:
-  explicit MpiBroadcastOp(OpKernelConstruction* context) : AsyncOpKernel(context) {
-    OP_REQUIRES_OK(context, context->GetAttr("root_rank", &root_rank_));
-    OP_REQUIRES_OK(context, context->GetAttr("ignore_name_scope", &ignore_name_scope_));
-  }
-
-  void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
-    OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
-
-    std::string node_name = name();
-    if (ignore_name_scope_) {
-      node_name = GetNameWithoutScope(node_name);
-    }
-
-    auto device = GetDeviceID(context);
-    auto tensor = context->input(0);
-    Tensor* output{};
-    if (mpi_rank() == root_rank_) {
-      context->set_output(0, tensor);
-    } else {
-      OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, tensor.shape(), &output), done);
-    }
-
-    // TODO
-  }
-
-  int root_rank_;
-  bool ignore_name_scope_;
-};
-
 template <typename Device>
 class MpiAllgatherOp : public AsyncOpKernel {
  public:
@@ -242,6 +211,82 @@ Arguments
 
 Output
     gathered:    A tensor with the same shape as `tensor` except for the first dimension.
+)doc");
+
+class MpiBroadcastOp : public AsyncOpKernel {
+ public:
+  explicit MpiBroadcastOp(OpKernelConstruction* context) : AsyncOpKernel(context) {
+    OP_REQUIRES_OK(context, context->GetAttr("root_rank", &root_rank_));
+    OP_REQUIRES_OK(context, context->GetAttr("ignore_name_scope", &ignore_name_scope_));
+    CHECK_EQ(root_rank_, 0) << "Currently only root_rank = 0 is supported for BroadcastOp";
+  }
+
+  void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
+    OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
+
+    auto node_name = name();
+    if (ignore_name_scope_) {
+      node_name = GetNameWithoutScope(node_name);
+    }
+    auto device = GetDeviceID(context);
+    auto tensor = context->input(0);
+
+    OpRecord record;
+
+    if (mpi_rank() == root_rank_) {
+      context->set_output(0, tensor);
+      record.out_tensor = context->mutable_output(0);
+    } else {
+      OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, tensor.shape(), &record.out_tensor), done);
+    }
+
+    record.name       = node_name;
+    record.op_context = context;
+    record.in_tensor  = &tensor;
+    record.on_gpu     = false;
+    record.rank       = mpi_rank();
+    record.dtype      = message::DataType_TF_UNK;
+    record.callback   = [done, context](StatusOr<Tensor> status) {
+      context->SetStatus(status.status());
+      done();
+    };
+
+    auto allreduce_launch_callback = [record] { EnqueueTensorCollective(record, message::RequestType_BROADCAST); };
+
+    allreduce_launch_callback();
+  }
+
+ private:
+  int root_rank_;
+  bool ignore_name_scope_;
+};
+
+REGISTER_KERNEL_BUILDER(Name("MPIBroadcast").Device(DEVICE_CPU), MpiBroadcastOp);
+#if HOROVOD_GPU_BROADCAST
+REGISTER_KERNEL_BUILDER(Name("HorovodBroadcast").Device(DEVICE_GPU), HorovodBroadcastOp);
+#endif
+
+REGISTER_OP("MPIBroadcast")
+    .Attr("T: {uint8, int8, uint16, int16, int32, int64, float16, float32, float64, bool}")
+    .Attr("root_rank: int")
+    .Attr("ignore_name_scope: bool = False")
+    .Input("tensor: T")
+    .Output("output: T")
+    .SetShapeFn([](shape_inference::InferenceContext* c) {
+      c->set_output(0, c->input(0));
+      return Status::OK();
+    })
+    .Doc(R"doc(
+Perform an MPI Broadcast on a tensor. All other processes that do a broadcast
+on a tensor with the same name must have the same dimension for that tensor.
+
+Arguments
+    tensor:     A tensor to broadcast.
+    root_rank:  Rank that will send data, other ranks will receive data.
+
+Output
+    output:    A tensor with the same shape as `tensor` and same value as
+               `tensor` on root rank.
 )doc");
 
 }  // namespace collective

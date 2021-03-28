@@ -48,6 +48,15 @@ class TensorFlowTests(tf.test.TestCase):
             gathered = tips_ops.allgather_op(tensor)
             print(gathered)
 
+    def test_tips_broadcast_cpu(self):
+        rank = self.evaluate(tips_ops.rank_op())
+
+        dim = 3
+        with tf.device("/cpu:0"):
+            tensor = tf.constant(rank, tf.float32, [4, 3, 3])
+            gathered = tips_ops.broadcast_op(tensor)
+            print(gathered)
+
     def _random_uniform(self, *args, **kwargs):
         if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):
             tf.random.set_seed(1234)
