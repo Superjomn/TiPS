@@ -72,7 +72,7 @@ using TensorTable = std::unordered_map<std::string, OpRecord>;
 
 struct CollectiveState {
   //! A lock to guard all the shared resource.
-  std::mutex mu;
+  mutable std::mutex mu;
 
   TensorTable tensor_table;
 
@@ -91,6 +91,9 @@ struct CollectiveState {
     static CollectiveState x;
     return x;
   }
+
+  OpRecord* LookupOpRecordGuarded(const std::string& tensor_name);
+  bool EraseOpRecordGuarded(const std::string& tensor_name);
 
   bool initialized() const;
 
@@ -115,7 +118,7 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
 /**
  * Process an ResponseMessage by doing a reduction, a gather or raising an error.
  */
-void PerformCollectiveOp(TensorTable& tensor_table,
+void PerformCollectiveOp(OpRecord* op_record,
                          message::ResponseType response_type,
                          const std::string name,
                          const std::string& error_msg);

@@ -32,12 +32,12 @@ void RpcServer::StartRunLoop() {
     // Read the message
 
     if (msg.length() == 0) {  // Terminate
-      LOG(WARNING) << "Receive a terminate message, RPC server to quit";
-      return;
+      MPI_LOG << "Receive a terminate message, RPC server to quit";
+      break;
     }
 
     if (msg.length() < sizeof(RpcMsgHead)) {
-      LOG(ERROR) << "Unknown message. Received data size " << msg.length() << ", message ignored";
+      MPI_LOG << "Unknown message. Received data size " << msg.length() << ", message ignored";
       continue;
     }
 
@@ -73,6 +73,8 @@ void RpcServer::StartRunLoop() {
         LOG(FATAL) << "Unknown message type found";
     }
   }
+
+  MPI_WARN << " RPC server quit";
 }
 
 std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const uint8_t *buf, size_t size) {
@@ -158,18 +160,22 @@ void RpcServer::Finalize() {
   VLOG(1) << "#### to finalize";
   CHECK(zmq_ctx_);
 
-  VLOG(3) << "tell all the threads to quit";
+  MPI_LOG << "tell all the threads to quit";
   for (int i = 0; i < num_listen_threads_; i++) {
     sender_mutexes_[mpi_rank()].lock();
     CHECK_GE(ignore_signal_call(zmq_msg_send, ZmqMessage().zmq_msg(), senders_[mpi_rank()], 0), 0);
     sender_mutexes_[mpi_rank()].unlock();
   }
 
+  MPI_LOG << "waiting for threads to quit";
+
   for (int i = 0; i < num_listen_threads_; i++) {
     if (listen_threads_[i].joinable()) {
       listen_threads_[i].join();
     }
   }
+
+  MPI_LOG << "all threads quit";
 
   for (int i = 0; i < mpi_size(); i++) {
     ZCHECK(zmq_close(senders_[i]));

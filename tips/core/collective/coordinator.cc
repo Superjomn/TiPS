@@ -21,6 +21,11 @@ bool IncreTensorCount(MessageTable& message_table, RequestMessage&& msg, int mpi
     message_table[name].emplace_back(std::move(msg));
     table_iter = message_table.find(name);
   } else {
+    if (!table_iter->second.empty()) {
+      CHECK_EQ(msg.msg().request_type(), table_iter->second.back().msg().request_type())
+          << "Request type should match in a collective operation, " << msg.msg().request_type() << " vs "
+          << table_iter->second.back().msg().request_type();
+    }
     table_iter->second.emplace_back(std::move(msg));
   }
 
@@ -224,70 +229,67 @@ void EnqueueTensorCollective(const OpRecord& record, message::RequestType reques
   CollectiveState::Global().message_queue->WriteMove(std::make_pair(head, std::move(message)));
 }
 
-void PerformCollectiveOp(TensorTable& tensor_table,
+void PerformCollectiveOp(OpRecord* op_record,
                          message::ResponseType response_type,
                          const std::string name,
                          const std::string& error_msg) {
   MPI_LOG << "Perform collective!";
-  OpRecord record;
-  {
-    std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
-
-    auto it = tensor_table.find(name);
-    CHECK(it != tensor_table.end());
-
-    CHECK(response_type == message::ResponseType_ALLREDUCE || response_type == message::ResponseType_ALLGATHER ||
-          response_type == message::ResponseType_ERROR);
-
-    record = it->second;
-  }
+  CHECK(response_type == message::ResponseType_ALLREDUCE || response_type == message::ResponseType_ALLGATHER ||
+        response_type == message::ResponseType_ERROR);
 
   Status status;
-  auto dtype = record.dtype;
+  auto dtype = op_record->dtype;
 
   if (response_type == message::ResponseType_ALLREDUCE) {
+    if (!op_record->out_tensor) {
+      auto status = op_record->op_context->allocate_output(0, op_record->in_tensor->shape(), &op_record->out_tensor);
+      OP_REQUIRES_OK_ASYNC(op_record->op_context, status, [&] { op_record->callback(status); });
+    }
     MPI_LOG << "Run MPI ALLREDUCE ...";
     switch (dtype) {
       case message::DataType_TF_INT32:
         MPI_LOG << "Allreduce int32 ...";
-        status = AllreduceCpu<int32_t>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
+        status = AllreduceCpu<int32_t>(op_record->in_tensor, op_record->out_tensor, CollectiveOpKind::SUM);
         break;
       case message::DataType_TF_FLOAT32:
         MPI_LOG << "Allreduce float32 ...";
-        status = AllreduceCpu<float>(record.in_tensor, record.out_tensor, CollectiveOpKind::SUM);
+        status = AllreduceCpu<float>(op_record->in_tensor, op_record->out_tensor, CollectiveOpKind::SUM);
         break;
     }
   } else if (response_type == message::ResponseType_ALLGATHER) {
     MPI_LOG << "Run MPI ALLGATHER ...";
 
-    std::vector<int32_t> first_rank_sizes(record.sizes_vec.size());
-    CHECK(!record.sizes_vec.empty());
+    std::vector<int32_t> first_rank_sizes(op_record->sizes_vec.size());
+    CHECK(!op_record->sizes_vec.empty());
     MPI_LOG << "record.sizes_vec: "
-            << ToString<int64_t>(absl::Span<int64_t>(record.sizes_vec.data(), record.sizes_vec.size()));
-    for (int i = 0; i < record.sizes_vec.size(); i++) first_rank_sizes[i] = record.sizes_vec[i];
+            << ToString<int64_t>(absl::Span<int64_t>(op_record->sizes_vec.data(), op_record->sizes_vec.size()));
+    for (int i = 0; i < op_record->sizes_vec.size(); i++) first_rank_sizes[i] = op_record->sizes_vec[i];
 
     // Allocate output tensor for that the Allgather output's shape is known now.
-    TensorShape shape = record.in_tensor->shape();
+    TensorShape shape = op_record->in_tensor->shape();
     shape.RemoveDim(0);
-    shape.InsertDim(0, std::accumulate(record.sizes_vec.begin(), record.sizes_vec.end(), 0, [](int64_t a, int64_t b) {
-                      return a + b;
-                    }));
+    shape.InsertDim(
+        0, std::accumulate(op_record->sizes_vec.begin(), op_record->sizes_vec.end(), 0, [](int64_t a, int64_t b) {
+          return a + b;
+        }));
     MPI_LOG << "allgather output shape: " << shape.DebugString();
-    CHECK(record.op_context);
-    CHECK(!record.out_tensor);
-    auto status = record.op_context->allocate_output(0, shape, &record.out_tensor);
-    OP_REQUIRES_OK_ASYNC(record.op_context, status, [&] { record.callback(status); });
+    CHECK(op_record->op_context);
+    CHECK(!op_record->out_tensor);
+    auto status = op_record->op_context->allocate_output(0, shape, &op_record->out_tensor);
+    OP_REQUIRES_OK_ASYNC(op_record->op_context, status, [&] { op_record->callback(status); });
 
-    CHECK(record.out_tensor);
-    CHECK(record.in_tensor);
+    CHECK(op_record->out_tensor);
+    CHECK(op_record->in_tensor);
     switch (dtype) {
       case message::DataType_TF_INT32:
-        status = AllgathervCpu<int32_t>(
-            record.in_tensor, absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()), record.out_tensor);
+        status = AllgathervCpu<int32_t>(op_record->in_tensor,
+                                        absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()),
+                                        op_record->out_tensor);
         break;
       case message::DataType_TF_FLOAT32:
-        status = AllgathervCpu<float>(
-            record.in_tensor, absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()), record.out_tensor);
+        status = AllgathervCpu<float>(op_record->in_tensor,
+                                      absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()),
+                                      op_record->out_tensor);
         break;
     }
 
@@ -296,12 +298,12 @@ void PerformCollectiveOp(TensorTable& tensor_table,
     LOG(FATAL) << "Not expected response type";
   }
 
-  CHECK(record.out_tensor);
+  CHECK(op_record->out_tensor);
 
   if (status.ok()) {
-    record.callback(*record.out_tensor);
+    op_record->callback(*op_record->out_tensor);
   } else {
-    record.callback(status);
+    op_record->callback(status);
   }
 }
 
@@ -331,8 +333,8 @@ void BackgroundThreadLoop() {
   // This is used by the coordinator to record the requests from workers and send response.
   std::unordered_map<std::string, std::vector<RpcMsgHead>> tensor_request_msg_heads;
 
-  auto* rpc_service = RpcServer::Global().LookupService(kCoordinatorRpcServiceName);
-  CHECK(rpc_service);
+  auto* collective_service = RpcServer::Global().LookupService(kCoordinatorRpcServiceName);
+  CHECK(collective_service);
 
   do {
     // process all the message in the queue
@@ -345,48 +347,43 @@ void BackgroundThreadLoop() {
         MPI_LOG << " send a request to coordinator";
         // callback: When the response arrived from coordinator, a Allreduce will be performed at worker.
         RpcCallback callback = [&](RpcMsgHead head, uint8_t* buf) {
-          auto msg = flatbuffers::GetRoot<message::ResponseMessage>(buf);
-          if (msg->response_type() == message::ResponseType_SHUTDOWN) {
+          auto msg                  = flatbuffers::GetRoot<message::ResponseMessage>(buf);
+          auto response_type        = msg->response_type();
+          auto tensor_name          = msg->tensor_name()->str();
+          std::string error_message = msg->error_message() ? msg->error_message()->str() : "";
+
+          // NOTE Shutdown is passed by request, so this branch is disabled currentlly.
+          if (response_type == message::ResponseType_SHUTDOWN) {
             CollectiveState::Global().shut_down = true;
             return;
           }
 
-          if (msg->response_type() == message::ResponseType_ERROR) {
-            auto status =
-                tensorflow::errors::FailedPrecondition(msg->error_message() ? msg->error_message()->str() : "");
-            tensor_table[msg->tensor_name()->str()].callback(status);
+          if (response_type == message::ResponseType_ERROR) {
+            auto status = tensorflow::errors::FailedPrecondition(error_message);
+            tensor_table[tensor_name].callback(status);
             return;
           }
 
-          MPI_LOG << " get response for [" << msg->tensor_name()->str() << "]";
-          if (msg->response_type() == message::ResponseType_ALLREDUCE) {
-            MPI_LOG << "To perform Allreduce";
-          } else if (msg->response_type() == message::ResponseType_ALLGATHER) {
-            MPI_LOG << "To perform Allgather";
-          } else {
-            LOG(FATAL) << "Not supported response type: " << msg->response_type();
+          if (response_type == message::ResponseType_ALLGATHER) {
+            tensor_table[tensor_name].sizes_vec.assign(msg->tensor_sizes()->begin(), msg->tensor_sizes()->end());
           }
 
-          if (msg->response_type() == message::ResponseType_ALLGATHER) {
-            tensor_table[msg->tensor_name()->str()].sizes_vec.assign(msg->tensor_sizes()->begin(),
-                                                                     msg->tensor_sizes()->end());
-          }
-          PerformCollectiveOp(tensor_table,
-                              msg->response_type(),
-                              msg->tensor_name()->str(),
-                              msg->error_message() ? msg->error_message()->str() : "");
+          CHECK(response_type == message::ResponseType_ALLGATHER || response_type == message::ResponseType_ALLREDUCE)
+              << "Unsupported response_type found: " << response_type;
 
-          auto record_iter = CollectiveState::Global().tensor_table.find(msg->tensor_name()->str());
-          CHECK(record_iter != CollectiveState::Global().tensor_table.end())
-              << "tensor_table has no record for [" << msg->tensor_name()->str() << "]";
-          auto& op_record = record_iter->second;
-          CHECK(op_record.callback);
-          op_record.callback(*op_record.out_tensor);
+          OpRecord* op_record = CollectiveState::Global().LookupOpRecordGuarded(tensor_name);
+          CHECK(op_record);
+          PerformCollectiveOp(op_record, response_type, tensor_name, error_message);
 
-          CollectiveState::Global().tensor_table.erase(record_iter);
+          CHECK(op_record->callback);
+          op_record->callback(*op_record->out_tensor);
+
+          CollectiveState::Global().EraseOpRecordGuarded(tensor_name);
         };
+
         // The workers other than rank 0 send its RequestMessage to the coordinator.
-        RpcServer::Global().SendRequest(0, rpc_service, message.second.GetBuffer(), message.second.GetSize(), callback);
+        RpcServer::Global().SendRequest(
+            0, collective_service, message.second.GetBuffer(), message.second.GetSize(), callback);
       } else {
         MPI_LOG << "coordinator process the message";
         // The coordinator collect all the ready_to_reduce tensors.
@@ -402,58 +399,61 @@ void BackgroundThreadLoop() {
           ready_to_reduce.push(tensor_name);
         }
       }
+    } else {
+      MPI_LOG << " message channel is closed";
     }
 
-    if (IsCoordinator()) {
-      for (int i = 0; i < ready_to_reduce.size(); i++) {
-        auto name = ready_to_reduce.front();
-        ready_to_reduce.pop();
-        MPI_LOG << "coordinator process a ready tensor [" << name << "]";
+    for (int i = 0; i < ready_to_reduce.size() && IsCoordinator(); i++) {
+      auto name = ready_to_reduce.front();
+      ready_to_reduce.pop();
+      MPI_LOG << "coordinator process a ready tensor [" << name << "]";
 
-        ResponseMessage response = ConstructResponseMessage(*message_table, name);
-        MPI_LOG << "response.name: " << response.msg().tensor_name()->str();
-        RpcMsgHead head;
-        head.message_type = RpcMsgType::RESPONSE;
-        head.client_id    = i;
-        head.server_id    = 0;
-        // TODO send the response back to the workers other than coordinator
-        for (auto& head : tensor_request_msg_heads[name]) {
-          MPI_LOG << "coordinator send response to " << head.client_id;
-          RpcServer::Global().SendResponse(head, response.GetBuffer(), response.GetSize());
-        }
-
-        std::string error_message = response.msg().error_message() ? response.msg().error_message()->str() : "";
-
-        std::stringstream error_stream;
-        bool error{};
-        auto requests_iter = CollectiveState::Global().message_table->find(name);
-        CHECK(requests_iter != CollectiveState::Global().message_table->end())
-            << "message table has no record called " << name;
-
-        if (response.msg().response_type() == message::ResponseType_ALLGATHER) {
-          auto first_rank_sizes = GatherFirstRankSizes(
-              absl::Span<RequestMessage>(requests_iter->second.data(), requests_iter->second.size()),
-              error,
-              error_stream);
-          tensor_table[name].sizes_vec = first_rank_sizes;
-          CHECK(!error) << error_stream.str();
-        }
-
-        tensor_request_msg_heads[name].clear();
-
-        PerformCollectiveOp(CollectiveState::Global().tensor_table,
-                            response.msg().response_type(),
-                            response.msg().tensor_name()->str(),
-                            error_message);
-
-        // Clear all the requests for this tensor.
-        CollectiveState::Global().message_table->at(name).clear();
+      ResponseMessage response = ConstructResponseMessage(*message_table, name);
+      MPI_LOG << "response.name: " << response.msg().tensor_name()->str();
+      RpcMsgHead head;
+      head.message_type = RpcMsgType::RESPONSE;
+      head.client_id    = i;
+      head.server_id    = 0;
+      // TODO send the response back to the workers other than coordinator
+      for (auto& head : tensor_request_msg_heads[name]) {
+        MPI_LOG << "coordinator send response to " << head.client_id;
+        RpcServer::Global().SendResponse(head, response.GetBuffer(), response.GetSize());
       }
+
+      std::string error_message = response.msg().error_message() ? response.msg().error_message()->str() : "";
+
+      std::stringstream error_stream;
+      bool error{};
+      MessageTable::iterator requests_iter;
+      {
+        std::lock_guard<std::mutex> lock(CollectiveState::Global().mu);
+        requests_iter = message_table->find(name);
+      }
+      CHECK(requests_iter != message_table->end()) << "message table has no record called " << name;
+
+      if (response.msg().response_type() == message::ResponseType_ALLGATHER) {
+        auto first_rank_sizes =
+            GatherFirstRankSizes(absl::Span<RequestMessage>(requests_iter->second.data(), requests_iter->second.size()),
+                                 error,
+                                 error_stream);
+        tensor_table[name].sizes_vec = first_rank_sizes;
+        CHECK(!error) << error_stream.str();
+      }
+
+      tensor_request_msg_heads[name].clear();
+
+      auto* op_record = CollectiveState::Global().LookupOpRecordGuarded(name);
+      CHECK(op_record);
+      PerformCollectiveOp(
+          op_record, response.msg().response_type(), response.msg().tensor_name()->str(), error_message);
+
+      // Clear all the requests for this tensor.
+      message_table->at(name).clear();
     }
 
   } while (!CollectiveState::Global().shut_down);
 
-  MPI_LOG << " stop working";
+  MPI_LOG << " background thread stop working";
 }
 
 bool CollectiveState::initialized() const { return message_table.get(); }
@@ -493,6 +493,26 @@ void CollectiveState::Finalize() {
   shut_down = true;
   message_queue->Close();
   CollectiveState::Global().background_thread.join();
+}
+
+OpRecord* CollectiveState::LookupOpRecordGuarded(const std::string& tensor_name) {
+  TensorTable ::iterator it;
+  {
+    std::lock_guard<std::mutex> lock(mu);
+    it = tensor_table.find(tensor_name);
+  }
+  if (it != tensor_table.end()) return &it->second;
+  return nullptr;
+}
+
+bool CollectiveState::EraseOpRecordGuarded(const std::string& tensor_name) {
+  std::lock_guard<std::mutex> lock(mu);
+  auto it = tensor_table.find(tensor_name);
+  if (it != tensor_table.end()) {
+    tensor_table.erase(it);
+    return true;
+  }
+  return false;
 }
 
 void ShutdownBackgroundService() {
