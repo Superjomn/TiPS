@@ -1,5 +1,7 @@
 #include "tips/core/mpi/tips_mpi.h"
 
+#include <absl/strings/str_format.h>
+
 #include "tips/core/common/common.h"
 
 namespace tips {
@@ -10,6 +12,10 @@ MpiContext &MpiContext::Global() {
 }
 
 MpiContext::MpiContext() {
+  if (!IsInitialized()) {
+    Initialize();
+  }
+
   int rank;
   int size;
   CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);
@@ -24,10 +30,26 @@ MpiContext::MpiContext() {
   mpi_barrier();
 }
 
+bool MpiContext::IsInitialized() {
+  int flag;
+  ZCHECK(MPI_Initialized(&flag));
+  return flag;
+}
+
+bool MpiContext::IsFinalized() {
+  int flag;
+  ZCHECK(MPI_Finalized(&flag));
+  return flag;
+}
+
+void MpiContext::Initialize(int *argc, char ***argv) { ZCHECK(MPI_Init(argc, argv)) << "MPI init failed"; }
+
 int mpi_rank() {
   int rank{-1};
   CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);
   return rank;
 }
+
+std::string mpi_rank_repr() { return absl::StrFormat("#rank-[%d/%d]", mpi_rank(), mpi_size()); }
 
 }  // namespace tips

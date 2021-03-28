@@ -1,9 +1,8 @@
 #pragma once
-#include <glog/logging.h>
+#include <flatbuffers/flatbuffers.h>
 #include <mpi.h>
 #include <zmq.h>
 
-#include <flatbuffers/flatbuffers.h>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -37,6 +36,8 @@ const char* GetRpcMsgTypeRepr(RpcMsgType type);
 std::ostream& operator<<(std::ostream& os, RpcMsgType type);
 
 struct RpcMsgHead {
+  bool initialized() const { return service; }
+
   RpcService* service{};
   RpcRequest* request{};
 
@@ -56,7 +57,7 @@ class RpcService {
   explicit RpcService(RpcCallback callback);
 
   ~RpcService() {
-    MPI_Barrier(mpi_comm());
+    mpi_barrier();
     CHECK_EQ(request_counter_, 0);
   }
 
@@ -118,9 +119,31 @@ class RpcServer {
   //! Finalize will force the server quit.
   void Finalize();
 
-  void SendRequest(int server_id, RpcService* service, const FlatBufferBuilder& buf, RpcCallback callback);
+  //! Tell whether the server is initialized.
+  bool initialized() const { return initialized_; }
+  //! Tell whether the server is finialized.
+  bool finalized() const { return finalized_; }
 
-  void SendResponse(RpcMsgHead head, const FlatBufferBuilder& buf);
+  /**
+   * Send a request message.
+   * @param server_id the id of the target server.
+   * @param service address of the service instance.
+   * @param buf the buffer of the message.
+   * @param len length of the buffer.
+   * @param callback the callback to trigger after response arrived.
+   */
+  void SendRequest(int server_id, RpcService* service, const uint8_t* buf, size_t len, RpcCallback callback);
+
+  /**
+   * Send a response message.
+   * @param head the message head.
+   * @param buf the buffer of the message to send.
+   * @param len the length of the buffer.
+   */
+  void SendResponse(RpcMsgHead head, const uint8_t* buf, size_t len);
+
+  //! Singleton for global usage.
+  static RpcServer& Global();
 
   ~RpcServer();
 
@@ -131,7 +154,7 @@ class RpcServer {
 
   void StartRunLoop();
 
-  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const FlatBufferBuilder& buf);
+  std::unique_ptr<ZmqMessage> MakeMessage(const RpcMsgHead& head, const uint8_t* buf, size_t len);
 
  private:
   int num_connection_{1};
@@ -151,6 +174,9 @@ class RpcServer {
   std::vector<std::thread> listen_threads_;
 
   std::unordered_map<std::string, RpcService*> services_;
+
+  bool initialized_{};
+  bool finalized_{};
 };
 
 }  // namespace tips

@@ -1,18 +1,19 @@
 #include "tips/core/common/naive_rpc.h"
-#include "tips/core/message/test0_generated.h"
 
 #include <mpi.h>
 
 #include <chrono>
 #include <thread>
 
+#include "tips/core/collective/utils.h"
+#include "tips/core/message/test0_generated.h"
+
 namespace tips {
 
 using namespace std::chrono_literals;
 using namespace test::test_message0;
 
-void TestRpc() {
-  RpcServer server;
+void TestRpc(RpcServer& server) {
   RpcCallback callback = [&server](const RpcMsgHead& head, uint8_t* buffer) {
     std::this_thread::sleep_for(500ms);
     if (head.message_type == RpcMsgType::REQUEST) {
@@ -38,7 +39,7 @@ void TestRpc() {
         msg.add_from_rank(mpi_rank());
         builder.Finish(msg.Finish());
 
-        server.SendResponse(response_head, builder);
+        server.SendResponse(response_head, builder.GetBufferPointer(), builder.GetSize());
       }
     }
 
@@ -65,7 +66,7 @@ void TestRpc() {
       msg.add_greet(greet);
       msg.add_v(1);
       builder.Finish(msg.Finish());
-      server.SendRequest(1, service, builder, callback);
+      server.SendRequest(1, service, builder.GetBufferPointer(), builder.GetSize(), callback);
     }
     {
       FlatBufferBuilder builder;
@@ -74,7 +75,7 @@ void TestRpc() {
       msg.add_greet(greet);
       msg.add_v(2);
       builder.Finish(msg.Finish());
-      server.SendRequest(1, service, builder, callback);
+      server.SendRequest(2, service, builder.GetBufferPointer(), builder.GetSize(), callback);
     }
   }
 
@@ -88,7 +89,9 @@ void TestRpc() {
 int main(int argc, char** argv) {
   MPI_Init(&argc, &argv);
 
-  tips::TestRpc();
+  tips::RpcServer server;
+
+  tips::TestRpc(server);
 
   MPI_Finalize();
   return 0;

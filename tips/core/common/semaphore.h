@@ -1,5 +1,4 @@
 #pragma once
-#include <glog/logging.h>
 #include <semaphore.h>
 
 #include <condition_variable>

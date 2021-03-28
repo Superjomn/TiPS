@@ -4,7 +4,7 @@ project(tips)
 # for IDE
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 
 option(WITH_TESTING         "Compile with Unittests"          ON)
 option(WITH_CUDA            "Compile with CUDA support"       OFF)
@@ -34,13 +34,16 @@ include_directories(${CMAKE_BINARY_DIR})
 
 set(THIRD_PARTY_PATH ${CMAKE_BINARY_DIR}/thirds)
 
-include(cmake/external/pybind11.cmake)
+#include(cmake/external/pybind11.cmake)
 include(cmake/external/gflags.cmake)
-include(cmake/external/glog.cmake)
+#include(cmake/external/glog.cmake)
 include(cmake/external/gtest.cmake)
 include(cmake/external/openmpi.cmake)
 include(cmake/external/flatbuffers.cmake)
 include(cmake/external/boost.cmake)
+include(cmake/external/tensorflow.cmake)
+include(cmake/external/absl.cmake)
+
 find_package(Threads REQUIRED)
 ## load in pkg-config support
 find_package(PkgConfig)
@@ -67,7 +70,12 @@ include_directories(${ZeroMQ_INCLUDE_DIR})
 
 set(core_src CACHE INTERNAL "" FORCE)
 
+function(mpi_test testcase nproc)
+  add_test(NAME ${testcase}_main COMMAND mpirun -np ${nproc} --allow-run-as-root ${testcase})
+endfunction()
+
 add_subdirectory(tips)
 
-cc_library(tipscore SRCS ${core_src} DEPS glog boost)
-target_link_libraries(tipscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY})
+cc_library(tipscore SRCS ${core_src} DEPS boost fbs_headers_dummy absl_base SHARED)
+target_compile_definitions(tipscore PRIVATE _GLIBCXX_USE_CXX11_ABI=0)
+target_link_libraries(tipscore ${OpenMPI_LIBRARY} ${ZeroMQ_LIBRARY} ${Tensorflow_LIBRARIES} fbs_headers_dummy)

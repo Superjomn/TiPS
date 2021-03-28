@@ -4,6 +4,7 @@
 #include <net/if.h>
 #include <stdarg.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include <cstring>
 #include <memory>
@@ -18,9 +19,9 @@ std::string GetLocalIp() {
 
   ifconf.ifc_len = 512;
   ifconf.ifc_buf = buf;
-  PCHECK((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) >= 0);
-  PCHECK(ioctl(sockfd, SIOCGIFCONF, &ifconf) >= 0);
-  PCHECK(0 == close(sockfd));
+  CHECK((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) >= 0);
+  CHECK(ioctl(sockfd, SIOCGIFCONF, &ifconf) >= 0);
+  CHECK(0 == close(sockfd));
 
   ifreq = (struct ifreq*)buf;
 

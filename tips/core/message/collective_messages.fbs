@@ -1,0 +1,35 @@
+namespace tips.collective.message;
+
+enum RequestType : short {
+  ALLREDUCE = 0,
+  ALLGATHER = 1,
+}
+
+enum ResponseType : short {
+  ALLREDUCE = 0,
+  ALLGATHER = 1,
+  ERROR = 2,
+  DONE = 3,
+  SHUTDOWN = 4,
+}
+
+enum DataType : short {
+  TF_UNK = -1,
+  TF_FLOAT32 = 0,
+  TF_INT32 = 1,
+}
+
+table RequestMessage {
+  request_rank:     int;
+  request_type:     RequestType;
+  tensor_type:      DataType;
+  tensor_name:      string;
+  tensor_shape:     [int64];
+}
+
+table ResponseMessage {
+  response_type: ResponseType;
+  tensor_name: string;
+  error_message: string;
+  tensor_sizes: [int64];
+}

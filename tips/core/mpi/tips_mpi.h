@@ -1,8 +1,8 @@
 #pragma once
-#include <glog/logging.h>
 #include <mpi.h>
 #include <stdint.h>
 
+#include "tips/core/common/logging.h"
 #include "tips/core/common/naive_buffer.h"
 
 namespace tips {
@@ -65,10 +65,19 @@ class MpiContext {
   // Get the ip address of a specific rank.
   const std::string& ip(int rank) const { return ip_table_[rank]; }
 
+  bool IsInitialized();
+
+  bool IsFinalized();
+
+  static void Initialize(int* argc = nullptr, char*** argv = nullptr);
+  static void Initialize(int argc, char** argv) { ZCHECK(MPI_Init(&argc, &argv)); }
+  static void Finalize() { ZCHECK(MPI_Finalize()); }
+
   static MpiContext& Global();
 
  private:
   std::vector<std::string> ip_table_;
+  bool initialized_{};
 };
 
 template <typename T>
@@ -113,4 +122,9 @@ inline int mpi_size() {
   return size;
 }
 
+std::string mpi_rank_repr();
+
 }  // namespace tips
+
+#define MPI_LOG LOG(INFO) << ::tips::mpi_rank_repr() << " "
+#define MPI_WARN LOG(WARNING) << ::tips::mpi_rank_repr() << " "

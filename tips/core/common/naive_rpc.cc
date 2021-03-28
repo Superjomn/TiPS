@@ -4,14 +4,15 @@ namespace tips {
 
 RpcServer::~RpcServer() {
   for (auto &item : services_) {
-    delete item.second;
+    if (item.second) delete item.second;
   }
 }
 
 RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback) {
+  MPI_LOG << "Add RPC service [" << type << "]";
   auto *new_service = new RpcService(std::move(callback));
-  auto res          = services_.try_emplace(type, new_service);
-  CHECK(res.second) << "duplicate add service [" << type << "]";
+  CHECK(!services_.count(type)) << "duplicate add service [" << type << "]";
+  services_.emplace(type, new_service);
   return new_service;
 }
 
@@ -50,6 +51,7 @@ void RpcServer::StartRunLoop() {
     RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(buffer.data());
 
     uint8_t *data = reinterpret_cast<uint8_t *>(buffer.data() + sizeof(RpcMsgHead));
+    if (buffer.size() == sizeof(RpcMsgHead)) data = nullptr;  // empty message content
     switch (head->message_type) {
       case RpcMsgType::REQUEST: {
         CHECK_EQ(head->server_id, mpi_rank());
@@ -73,28 +75,33 @@ void RpcServer::StartRunLoop() {
   }
 }
 
-std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const FlatBufferBuilder &buf) {
+std::unique_ptr<ZmqMessage> RpcServer::MakeMessage(const RpcMsgHead &head, const uint8_t *buf, size_t size) {
   CHECK_NE(head.server_id, -1);
   CHECK_NE(head.client_id, -1);
   CHECK(head.service);
   CHECK(head.request);
 
   size_t len = sizeof(head);
-  len += buf.GetSize();
+  len += size;
 
-  auto msg = std::make_unique<ZmqMessage>();
+  auto msg = std::unique_ptr<ZmqMessage>(new ZmqMessage);
   msg->Resize(len);
   len = 0;
 
   std::memcpy(msg->buffer() + len, &head, sizeof(head));
   len += sizeof(head);
 
-  std::memcpy(msg->buffer() + len, buf.GetBufferPointer(), buf.GetSize());
+  if (size > 0) {
+    std::memcpy(msg->buffer() + len, buf, size);
+  }
 
   return msg;
 }
 
-void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
+void RpcServer::SendResponse(RpcMsgHead head, const uint8_t *buf, size_t len) {
+  CHECK(initialized_) << "Server should be initialized first";
+  CHECK(!finalized_) << "Server is finailized";
+
   CHECK_EQ(head.server_id, mpi_rank());
   CHECK_GE(head.client_id, 0);
   CHECK_LT(head.client_id, mpi_size());
@@ -110,13 +117,16 @@ void RpcServer::SendResponse(RpcMsgHead head, const FlatBufferBuilder &buf) {
   VLOG(3) << "- service " << head.service;
   VLOG(3) << "--------";
 
-  auto msg = MakeMessage(head, buf);
+  auto msg = MakeMessage(head, buf, len);
   sender_mutexes_[head.client_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[head.client_id], 0), 0);
   sender_mutexes_[head.client_id].unlock();
 }
 
-void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBufferBuilder &buf, RpcCallback callback) {
+void RpcServer::SendRequest(int server_id, RpcService *service, const uint8_t *buf, size_t len, RpcCallback callback) {
+  CHECK(initialized_) << "Server should be initialized first";
+  CHECK(!finalized_) << "Server is finailized";
+
   CHECK_GE(server_id, 0);
   CHECK_LT(server_id, mpi_size());
   CHECK(service);
@@ -132,13 +142,19 @@ void RpcServer::SendRequest(int server_id, RpcService *service, const FlatBuffer
   head.message_type = RpcMsgType::REQUEST;
 
   VLOG(4) << "to send request.service " << head.service;
-  auto msg = MakeMessage(head, buf);
+  auto msg = MakeMessage(head, buf, len);
   sender_mutexes_[server_id].lock();
   CHECK_GE(ignore_signal_call(zmq_msg_send, msg->zmq_msg(), senders_[server_id], 0), 0);
   sender_mutexes_[server_id].unlock();
 }
 
 void RpcServer::Finalize() {
+  CHECK(initialized_);
+  CHECK(!finalized_) << "Duplicate finalization found";
+
+  // Update state.
+  finalized_ = true;
+
   VLOG(1) << "#### to finalize";
   CHECK(zmq_ctx_);
 
@@ -163,9 +179,19 @@ void RpcServer::Finalize() {
   ZCHECK(zmq_ctx_destroy(zmq_ctx_));
 
   mpi_barrier();
+
+  for (auto &item : services_) {
+    delete item.second;
+    item.second = nullptr;
+  }
+
+  mpi_barrier();
 }
 
 void RpcServer::Initialize() {
+  // Update state.
+  initialized_ = true;
+
   MPI_Barrier(mpi_comm());
   CHECK(!zmq_ctx_) << "Duplicate initialization found";
   CHECK(zmq_ctx_ = zmq_ctx_new());
@@ -195,7 +221,7 @@ void RpcServer::Initialize() {
     CHECK_EQ(MPI_Allgather(MPI_IN_PLACE, 0, MPI_INT, &ports[0], 1, MPI_INT, mpi_comm()), 0);
 
     for (int i = 0; i < mpi_size(); i++) {
-      LOG(INFO) << "ip " << i << " " << MpiContext::Global().ip(i);
+      MPI_LOG << "ip " << i << " " << MpiContext::Global().ip(i);
       CHECK_EQ(ignore_signal_call(zmq_connect,
                                   senders_[i],
                                   StringFormat("tcp://%s:%d", MpiContext::Global().ip(i).c_str(), ports[i]).c_str()),
@@ -215,7 +241,7 @@ int RpcServer::BindRandomPort() {
     int port         = 1024 + rand() % (65536 - 1024);
     std::string addr = StringFormat("tcp://%s:%d", MpiContext::Global().ip().c_str(), port);
     int res          = 0;
-    PCHECK((res = zmq_bind(receiver_, addr.c_str()), res == 0 || errno == EADDRINUSE));
+    CHECK((res = zmq_bind(receiver_, addr.c_str()), res == 0 || errno == EADDRINUSE));
 
     if (res == 0) {
       return port;
@@ -250,7 +276,7 @@ RpcService::RpcService(RpcCallback callback) : callback_(std::move(callback)) {
 
   if (mpi_rank() == 0) {
     for (int i = 0; i < mpi_size(); i++) {
-      LOG(INFO) << i << "-service: " << remote_service_ptrs_[i];
+      MPI_LOG << i << "-service: " << remote_service_ptrs_[i];
     }
   }
 }
@@ -263,6 +289,12 @@ RpcService *RpcService::remote_service(size_t rank) {
 RpcService *RpcServer::LookupService(const std::string &type) const {
   auto it = services_.find(type);
   return it == services_.end() ? nullptr : it->second;
+}
+
+RpcServer &RpcServer::Global() {
+  // NOTE One should manually call RpcServer::Initialize and RpcServer::Finalize before and after using this singleton.
+  static RpcServer x;
+  return x;
 }
 
 }  // namespace tips
