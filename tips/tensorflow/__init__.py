@@ -4,6 +4,7 @@ import tensorflow as tf
 
 from tips.tensorflow.ops import allreduce_op, size_op, rank_op, tips_basics
 from tips.tensorflow.utils import cache
+from tips.tensorflow import utils
 
 
 def allreduce(tensor: tf.Tensor,
@@ -60,14 +61,34 @@ def _allreduce_cond(tensor: tf.Tensor, *args, **kwargs):
 def _make_cached_allreduce_grads_fn(name: str, device_dense: str,
                                     device_sparse: str, sparse_as_dense: bool,
                                     op: str):
-    def allreduce_grads(grads, vars=None):
-        with tf.name_scope(name + '_Allreduce'):
+    if op == 'Average':
+        pass
+    else:
+        pass
+
+    def allreduce_grads(grads):
+        with tf.name_scope(name + "_Allreduce"):
             if sparse_as_dense:
                 grads = [
                     tf.convert_to_tensor(grad) if grad is not None
                     and isinstance(grad, tf.IndexedSlices) else grad
                     for grad in grads
                 ]
+
+            # if num_groups > 0:
+            #     grads_clean = [grad for grad in grads if grad is not None]
+            #     grads_split = split_list(grads_clean, num_groups)
+
+            #     reduce_ops = []
+            #     for group in grads_split:
+            #         reduce_ops += _grouped_allreduce_cond(group,
+            #                                               device_dense=device_dense,
+            #                                               device_sparse=device_sparse,
+            #                                               compression=compression,
+            #                                               op=op,
+            #                                               prescale_factor=prescale_factor,
+            #                                               postscale_factor=postscale_factor)
+            #     return reduce_ops
 
             return [
                 _allreduce_cond(
@@ -76,6 +97,27 @@ def _make_cached_allreduce_grads_fn(name: str, device_dense: str,
                     device_sparse=device_sparse,
                     op=op) if grad is not None else grad for grad in grads
             ]
+
+    if utils.executing_eagerly():
+        return utils.make_subgraph(allreduce_grads)
+    else:
+        return allreduce_grads
+    # def allreduce_grads(grads, vars=None):
+    #     with tf.name_scope(name + '_Allreduce'):
+    #         if sparse_as_dense:
+    #             grads = [
+    #                 tf.convert_to_tensor(grad) if grad is not None
+    #                 and isinstance(grad, tf.IndexedSlices) else grad
+    #                 for grad in grads
+    #             ]
+
+    #         return [
+    #             _allreduce_cond(
+    #                 grad,
+    #                 device_dense=device_dense,
+    #                 device_sparse=device_sparse,
+    #                 op=op) if grad is not None else grad for grad in grads
+    #         ]
 
 
 def _make_allreduce_grads_fn(name: str, device_dense: str, device_sparse: str,

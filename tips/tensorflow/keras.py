@@ -79,7 +79,7 @@ def create_distributed_optimizer(optimizer,
                         rank=tips.tips_basics.rank(),
                         optimizer_type=LocalGradientAggregationHelper.
                         _OPTIMIZER_TYPE_KERAS)
-                    super(self.__class__, self).__init__(**kwargs)
+            super(self.__class__, self).__init__(**kwargs)
 
         def _compute_gradients(self, loss, var_list, grad_loss=None,
                                tape=None):
@@ -115,14 +115,21 @@ def create_distributed_optimizer(optimizer,
             return self._allreduce(gradients, params)
 
         def _aggregate_gradients(self, grads_and_vars):
+            grads, vars = list(zip(*grads_and_vars))
+            aggregated_grads = self._allreduce(grads)
             if _PRE_TF_2_4_0:
-                # TODO(Superjomn) Support latter.
-                raise NotImplementedError(
-                    'tensorflow version earlier than 2.4.0 is not supported')
+                # Prior to TF 2.4.0, this function was expected to return only a list of
+                # grads, not a list of (grad, var) tuples.
+                return aggregated_grads
+            return list(zip(aggregated_grads, vars))
 
+        def _allreduce(self, grads):
+            self._aggregated_gradients = True
+
+            if self._agg_helper:
+                return self._agg_helper.compute_gradients(tuple(grads))
             else:
-                return super(_DistributedOptimizer,
-                             self)._aggregate_gradients(grads_and_vars)
+                return self._allreduce_grads(grads)
 
         def apply_gradients(self, *args, **kwargs):
             if self._agg_helper:
@@ -138,10 +145,12 @@ def create_distributed_optimizer(optimizer,
                 results = super(self.__class__, self).apply_gradients(
                     *args, **kwargs)
 
-            if _PRE_TF_2_4_0:
-                # TODO(Superjomn) Support latter.
-                raise NotImplementedError(
-                    'tensorflow version earlier than 2.4.0 is not supported')
+            if not self._aggregated_gradients:
+                raise Exception(
+                    '`apply_gradients()` was called without a call to '
+                    '`get_gradients()` or `_aggregate_gradients`. If you\'re '
+                    'using TensorFlow 2.0, please specify '
+                    '`experimental_run_tf_function=False` in `compile()`.')
 
             return results
 

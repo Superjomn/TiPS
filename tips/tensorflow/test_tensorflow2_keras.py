@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import warnings
+import pytest
 
 from distutils.version import LooseVersion
 
@@ -14,6 +15,9 @@ _PRE_TF_2_4_0 = LooseVersion(tf.__version__) < LooseVersion("2.4.0")
 _PRE_TF_2_2_0 = LooseVersion(tf.__version__) < LooseVersion("2.2.0")
 
 
+@pytest.mark.skipif(
+    LooseVersion(tf.__version__) < LooseVersion('2.0.0'),
+    reason='TensorFlow v2 tests')
 class Tf2KerasTests(tf.test.TestCase):
     def __init__(self, *args, **kwargs):
         super(Tf2KerasTests, self).__init__(*args, **kwargs)
@@ -47,16 +51,15 @@ class Tf2KerasTests(tf.test.TestCase):
             tips_optimizer.apply_gradients(
                 zip(gradient_updates, model_variables), **kwargs)
 
-        gradients = [tf.constant([float(tips_basics.rank())])]
-        variables = [tf.Variable([0.0])]
+        gradients = [tf.constant([float(tips_basics.rank())], name="x")]
+        variables = [tf.Variable([1.0])]
 
         for idx in range(10):
-            #updated_gradients = tips_optimizer._aggregate_gradients(
-            #zip(gradients, variables))
             apply_gradients_in_tf_function(
                 gradients, variables, experimental_aggregate_gradients=False)
 
         updated_variable_value = variables[0][0].numpy()
+        print('updated', updated_variable_value)
 
 
 if __name__ == '__main__':

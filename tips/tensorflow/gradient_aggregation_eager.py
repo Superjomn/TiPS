@@ -101,6 +101,9 @@ class LocalGradientAggregationHelperEager:
 
     def _allreduce_helper(self, grads):
         allreduced_grads = self.allreduce_grads(grads)
+        print('allreduced_grads')
+        for x in allreduced_grads:
+            print(x)
 
         if not self.average_aggregated_gradients:
             return allreduced_grads

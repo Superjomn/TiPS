@@ -28,7 +28,6 @@ class Channel {
   }
 
   void Close() {
-    LOG(INFO) << "Closed";
     std::lock_guard<std::mutex> lock(mu_);
     closed_ = true;
     full_cond_.notify_all();

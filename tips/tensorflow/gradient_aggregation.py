@@ -375,6 +375,7 @@ class LocalGradientAggregationHelper:
 
         with tf.control_dependencies([aggregation_read_ops]):
             averaged_gradients = self._allreduce_grads(aggregated_grads)
+            print('allreduced_grads', [x for x in averaged_gradients])
 
             # Reset counter.
             with tf.control_dependencies(

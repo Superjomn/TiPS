@@ -126,5 +126,5 @@ std::string mpi_rank_repr();
 
 }  // namespace tips
 
-#define MPI_LOG LOG(INFO) << ::tips::mpi_rank_repr() << " "
-#define MPI_WARN LOG(WARNING) << ::tips::mpi_rank_repr() << " "
+#define MPI_LOG VLOG(2) << ::tips::mpi_rank_repr() << " "
+#define MPI_WARN VLOG(1) << ::tips::mpi_rank_repr() << " "
