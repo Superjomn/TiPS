@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import warnings
+import math
 import pytest
 
 from distutils.version import LooseVersion
@@ -10,6 +11,7 @@ from tensorflow.python.keras.optimizer_v2 import optimizer_v2
 
 import tips.tensorflow.keras as tips
 from tips.tensorflow.ops import tips_basics
+from tips.tensorflow.keras.callbacks import BroadcastGlobalVariablesCallback
 
 _PRE_TF_2_4_0 = LooseVersion(tf.__version__) < LooseVersion("2.4.0")
 _PRE_TF_2_2_0 = LooseVersion(tf.__version__) < LooseVersion("2.2.0")
@@ -23,43 +25,31 @@ class Tf2KerasTests(tf.test.TestCase):
         super(Tf2KerasTests, self).__init__(*args, **kwargs)
         warnings.simplefilter("module")
 
-    def test_gradient_aggregation(self):
-        class TestingOptimizer(optimizer_v2.OptimizerV2):
-            def get_config(self):
-                config = super(TestingOptimizer, self).get_config()
-                return config
+    def test_train_model_lr_schedule(self):
+        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+            0.001 * tips_basics.size(),
+            decay_steps=100000,
+            decay_rate=0.96,
+            staircase=True)
+        opt = tf.keras.optimizers.Adam(lr_schedule)
+        opt = tips.DistributedOptimizer(opt)
 
-            def _create_slots(self, var_list):
-                # Only needed for TF < 2.2.
-                pass
+        model = keras.models.Sequential()
+        model.add(keras.layers.Dense(2, input_shape=(3, )))
+        model.add(keras.layers.RepeatVector(3))
+        model.add(keras.layers.ThresholdedReLU(0.5))
+        model.compile(
+            loss=keras.losses.mean_squared_error,
+            optimizer=opt,
+            metrics=[keras.metrics.categorical_accuracy],
+            experimental_run_tf_function=False)
 
-            def _resource_apply_dense(self, grad, handle, apply_state=None):
-                return handle.assign_add(grad)
+        x = np.random.random((1, 3))
+        y = np.random.random((1, 3, 2))
 
-        backward_passes_per_step = 4
-        tips_optimizer = tips.DistributedOptimizer(
-            optimizer=TestingOptimizer("test"),
-            backward_passes_per_step=backward_passes_per_step,
-            average_aggregated_gradients=True,
-        )
-
-        _ = tips_optimizer.iterations
-
-        @tf.function
-        def apply_gradients_in_tf_function(gradient_updates, model_variables,
-                                           **kwargs):
-            tips_optimizer.apply_gradients(
-                zip(gradient_updates, model_variables), **kwargs)
-
-        gradients = [tf.constant([float(tips_basics.rank())], name="x")]
-        variables = [tf.Variable([1.0])]
-
-        for idx in range(10):
-            apply_gradients_in_tf_function(
-                gradients, variables, experimental_aggregate_gradients=False)
-
-        updated_variable_value = variables[0][0].numpy()
-        print('updated', updated_variable_value)
+        # No assertions, we just need to verify that it doesn't hang or error
+        callbacks = [BroadcastGlobalVariablesCallback(0)]
+        model.fit(x, y, steps_per_epoch=1, callbacks=callbacks, epochs=1)
 
 
 if __name__ == '__main__':

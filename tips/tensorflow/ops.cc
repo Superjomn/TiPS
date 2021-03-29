@@ -18,6 +18,8 @@ Status IsMpiIntialized() {
   return Status::OK();
 }
 
+static int counter = 0;
+
 template <typename Device>
 class MpiSizeOp : public tensorflow::OpKernel {
  public:
@@ -88,8 +90,10 @@ class MpiAllreduceOp : public AsyncOpKernel {
     const auto* input_tensor = &context->input(0);
     Tensor* output_tensor;
     OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, input_tensor->shape(), &output_tensor), done);
+    MPI_LOG << "allreduce allocated output_tensor: " << output_tensor << " " << output_tensor->DebugString();
+    MPI_LOG << input_tensor->DebugString() << " vs " << output_tensor->DebugString();
 
-    LOG(INFO) << "running op: " << name();
+    MPI_LOG << "******** running op: " << name() << " " << this;
     OpRecord record;
     record.name       = name();
     record.op_context = context;
@@ -98,7 +102,7 @@ class MpiAllreduceOp : public AsyncOpKernel {
     record.on_gpu     = false;
     record.rank       = mpi_rank();
     record.dtype      = message::DataType_TF_UNK;
-    OP_REQUIRES_OK_ASYNC(context, TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype), done);
+    TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype);
 
     const size_t temp_size = (input_tensor->NumElements() + mpi_size() - 1) / mpi_size();
     TensorShape temp_shape;
@@ -119,7 +123,7 @@ class MpiAllreduceOp : public AsyncOpKernel {
 REGISTER_KERNEL_BUILDER(Name("MPIAllreduce").Device(DEVICE_CPU), MpiAllreduceOp<CPUDevice>);
 
 REGISTER_OP("MPIAllreduce")
-    .Attr("T: {int32, int64, float32}")
+    .Attr("T: {int32, int64, float32, float64}")
     .Input("tensor: T")
     .Output("sum: T")
     .SetShapeFn([](shape_inference::InferenceContext* c) {
@@ -175,7 +179,7 @@ class MpiAllgatherOp : public AsyncOpKernel {
     record.rank       = mpi_rank();
     record.dtype      = message::DataType_TF_UNK;
 
-    OP_REQUIRES_OK_ASYNC(context, TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype), done);
+    TF_DataTypeToMessageDataType(input_tensor->dtype(), &record.dtype);
 
     record.callback = [done, context](StatusOr<Tensor> status) {
       context->SetStatus(status.status());
@@ -224,18 +228,20 @@ class MpiBroadcastOp : public AsyncOpKernel {
   void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
     OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
 
-    auto node_name = name();
-    if (ignore_name_scope_) {
-      node_name = GetNameWithoutScope(node_name);
-    }
-    auto device = GetDeviceID(context);
-    auto tensor = context->input(0);
+    auto node_name = name() + "_" + std::to_string(counter++);
+    auto device    = GetDeviceID(context);
+    auto tensor    = context->input(0);
+
+    MPI_LOG << "******** running op: " << name() << " " << this;
+    MPI_LOG << "input tensor: " << tensor.DebugString();
+    MPI_LOG << "output tensor: " << tensor.DebugString();
 
     OpRecord record;
 
     if (mpi_rank() == root_rank_) {
       context->set_output(0, tensor);
       record.out_tensor = context->mutable_output(0);
+      LOG(INFO) << "root output: " << tensor.DebugString() << " vs " << record.out_tensor->DebugString();
     } else {
       OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, tensor.shape(), &record.out_tensor), done);
     }
@@ -245,8 +251,10 @@ class MpiBroadcastOp : public AsyncOpKernel {
     record.in_tensor  = &tensor;
     record.on_gpu     = false;
     record.rank       = mpi_rank();
-    record.dtype      = message::DataType_TF_UNK;
-    record.callback   = [done, context](StatusOr<Tensor> status) {
+    TF_DataTypeToMessageDataType(tensor.dtype(), &record.dtype);
+
+    record.callback = [done, context, node_name](StatusOr<Tensor> status) {
+      LOG(INFO) << "************** done for " << node_name << " called";
       context->SetStatus(status.status());
       done();
     };

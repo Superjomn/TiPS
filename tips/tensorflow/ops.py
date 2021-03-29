@@ -25,6 +25,10 @@ MPI_LIB = _load_library('libtipscore.so')
 
 tips_basics = TipsBasics("libtipscore.so")
 
+size = tips_basics.size
+rank = tips_basics.rank
+shutdown = tips_basics.shutdown
+
 
 def _normialize_name(name):
     """Normalizes operation name to TensorFlow rules."""

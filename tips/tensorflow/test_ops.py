@@ -57,6 +57,23 @@ class TensorFlowTests(tf.test.TestCase):
             gathered = tips_ops.broadcast_op(tensor)
             print(gathered)
 
+    def test_tips_broadcast_scalar_cpu(self):
+        with tf.device("/cpu:0"):
+            i64 = tf.constant(tips_ops.rank(), tf.int64, [])
+            dbl = tf.constant(tips_ops.rank(), tf.float64, [])
+            gathered = tips_ops.broadcast_op(i64, name="i64_broadcast")
+            print(gathered)
+            #gathered = tips_ops.broadcast_op(i64, name="i64_broadcast")
+            gathered1 = tips_ops.broadcast_op(dbl, name="double_broadcast")
+
+    def test_tips_allreduce_scalar_cpu(self):
+        with tf.device("/cpu:0"):
+            i64 = tf.constant(tips_ops.rank(), tf.int64, [])
+            dbl = tf.constant(tips_ops.rank(), tf.float64, [])
+            gathered = tips_ops.allreduce_op(i64, name="i64_broadcast")
+            gathered = tips_ops.allreduce_op(i64, name="i64_broadcast")
+            #gathered = tips_ops.allreduce_op(dbl, name="double_broadcast")
+
     def _random_uniform(self, *args, **kwargs):
         if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):
             tf.random.set_seed(1234)

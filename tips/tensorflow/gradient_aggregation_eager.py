@@ -19,6 +19,7 @@ class LocalGradientAggregationHelperEager:
             sparse_as_dense,
             average_aggregated_gradients,
     ):
+        print('Build LocalGradientAggregationHelperEager ...')
         self.allreduce_grads = allreduce_func
         self.sparse_as_dense = sparse_as_dense
 
@@ -101,9 +102,6 @@ class LocalGradientAggregationHelperEager:
 
     def _allreduce_helper(self, grads):
         allreduced_grads = self.allreduce_grads(grads)
-        print('allreduced_grads')
-        for x in allreduced_grads:
-            print(x)
 
         if not self.average_aggregated_gradients:
             return allreduced_grads

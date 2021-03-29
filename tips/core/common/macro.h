@@ -54,3 +54,5 @@
 #define SWIFTS_PRINTF_ATTRIBUTE(string_index, first_to_check)
 #define SWIFTS_SCANF_ATTRIBUTE(string_index, first_to_check)
 #endif
+
+#define TIPS_MUST_USE_RESULT __attribute__((warn_unused_result))
