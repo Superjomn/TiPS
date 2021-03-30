@@ -118,10 +118,11 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
 /**
  * Process an ResponseMessage by doing a reduction, a gather or raising an error.
  */
-void PerformCollectiveOp(OpRecord* op_record,
-                         message::ResponseType response_type,
-                         const std::string name,
-                         const std::string& error_msg);
+TIPS_MUST_USE_RESULT
+Status PerformCollectiveOp(OpRecord* op_record,
+                           message::ResponseType response_type,
+                           const std::string name,
+                           const std::string& error_msg);
 
 // This function adds the op's record into the local op queue and sends a message to the coordinator indicating that
 // this rank is ready to begin. The background thread will handle this message.

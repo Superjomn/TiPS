@@ -207,17 +207,27 @@ RequestMessage CreateRequestMessage(int request_rank,
   return RequestMessage(builder.Release());
 }
 
+// The collective system depends on the tensor shape to determine number of elements while Tensorflow represent scalar
+// with an empty shape tensor. This function ensure that the scalar has a [1] shape.
+std::vector<int64_t> CreateNoEmptyTfShape(const TensorShape& tensor_shape) {
+  std::vector<int64_t> shape;
+  for (int i = 0; i < tensor_shape.dims(); i++) {
+    shape.push_back(tensor_shape.dim_size(i));
+  }
+  if (shape.empty()) {
+    shape.push_back(1);
+  }
+  return shape;
+}
+
 void EnqueueTensorCollective(const OpRecord& record, message::RequestType request_type) {
   const Tensor* in_tensor = record.in_tensor;
-  std::vector<int64_t> shape;
-  for (int i = 0; i < in_tensor->shape().dims(); i++) {
-    shape.push_back(in_tensor->shape().dim_size(i));
-  }
+  auto shape              = CreateNoEmptyTfShape(in_tensor->shape());
+  auto message            = CreateRequestMessage(record.rank, request_type, record.dtype, record.name, shape);
 
-  auto message = CreateRequestMessage(record.rank, request_type, record.dtype, record.name, shape);
-  MPI_LOG << "message.name: " << message.msg().tensor_name()->str();
-
-  MPI_LOG << " enqueue record [" << record.name << "] to the queue";
+  MPI_LOG << " enqueue record [" << record.name << "] to the queue\t"
+          << "input: " << record.in_tensor->DebugString() << "\t"
+          << " output: " << (record.out_tensor ? record.out_tensor->DebugString() : std::string(" empty "));
   CHECK(record.callback);
 
   {
@@ -230,40 +240,65 @@ void EnqueueTensorCollective(const OpRecord& record, message::RequestType reques
   CollectiveState::Global().message_queue->WriteMove(std::make_pair(head, std::move(message)));
 }
 
-void PerformCollectiveOp(OpRecord* op_record,
-                         message::ResponseType response_type,
-                         const std::string name,
-                         const std::string& error_msg) {
-  MPI_LOG << "Perform collective!";
-  CHECK(response_type == message::ResponseType_ALLREDUCE || response_type == message::ResponseType_ALLGATHER ||
-        response_type == message::ResponseType_BROADCAST || response_type == message::ResponseType_ERROR);
+Status PerformCollectiveOp(OpRecord* op_record,
+                           message::ResponseType response_type,
+                           const std::string name,
+                           const std::string& error_msg) {
+  MPI_LOG << "Perform collective for " << op_record->name;
+
+  if (response_type != message::ResponseType_ALLREDUCE && response_type != message::ResponseType_ALLGATHER &&
+      response_type != message::ResponseType_BROADCAST && response_type != message::ResponseType_ERROR) {
+    LOG(ERROR) << "Unsupported response_type found " << response_type;
+    return tensorflow::errors::FailedPrecondition("Unsupported response_type found %d", response_type);
+  }
 
   Status status;
   auto dtype = op_record->dtype;
 
   if (response_type == message::ResponseType_ALLREDUCE) {
+    MPI_LOG << "allreducing";
+    LOG(INFO) << "input: " << op_record->in_tensor << " " << op_record->in_tensor->DebugString();
+    LOG(INFO) << "output: " << op_record->out_tensor;
+    LOG(INFO) << " " << op_record->out_tensor->DebugString();
     CHECK(op_record->out_tensor);
-    MPI_LOG << "Run MPI ALLREDUCE ...";
     switch (dtype) {
       case message::DataType_TF_INT32:
-        MPI_LOG << "Allreduce int32 ...";
         status = AllreduceCpu<int32_t>(op_record->in_tensor, op_record->out_tensor, CollectiveOpKind::SUM);
         break;
       case message::DataType_TF_FLOAT32:
-        MPI_LOG << "Allreduce float32 ...";
         status = AllreduceCpu<float>(op_record->in_tensor, op_record->out_tensor, CollectiveOpKind::SUM);
         break;
+      case message::DataType_TF_INT64:
+        status = AllreduceCpu<int64_t>(op_record->in_tensor, op_record->out_tensor, CollectiveOpKind::SUM);
+        break;
+      case message::DataType_TF_FLOAT64:
+        status = AllreduceCpu<double>(op_record->in_tensor, op_record->out_tensor, CollectiveOpKind::SUM);
+        break;
+      default:
+        LOG(FATAL) << "Not supporte dtype: " << dtype;
     }
   } else if (response_type == message::ResponseType_BROADCAST) {
+    MPI_LOG << "broadcasting " << op_record->name;
+    LOG(INFO) << "output: " << op_record->out_tensor->DebugString();
     CHECK(op_record->out_tensor);
+    LOG(INFO) << op_record->name << " op_record.output.shape: " << op_record->out_tensor->DebugString();
     switch (dtype) {
       case message::DataType_TF_INT32:
         // NOTE root_rank should be passed in.
         status = BroadcastCpu<int32_t>(op_record->out_tensor, 0);
         break;
+      case message::DataType_TF_INT64:
+        // NOTE root_rank should be passed in.
+        status = BroadcastCpu<int64_t>(op_record->out_tensor, 0);
+        break;
       case message::DataType_TF_FLOAT32:
         status = BroadcastCpu<float>(op_record->out_tensor, 0);
         break;
+      case message::DataType_TF_FLOAT64:
+        status = BroadcastCpu<double>(op_record->out_tensor, 0);
+        break;
+      default:
+        LOG(FATAL) << "Not supporte dtype: " << dtype;
     }
   } else if (response_type == message::ResponseType_ALLGATHER) {
     MPI_LOG << "Run MPI ALLGATHER ...";
@@ -284,8 +319,8 @@ void PerformCollectiveOp(OpRecord* op_record,
     MPI_LOG << "allgather output shape: " << shape.DebugString();
     CHECK(op_record->op_context);
     CHECK(!op_record->out_tensor);
-    auto status = op_record->op_context->allocate_output(0, shape, &op_record->out_tensor);
-    OP_REQUIRES_OK_ASYNC(op_record->op_context, status, [&] { op_record->callback(status); });
+    status = op_record->op_context->allocate_output(0, shape, &op_record->out_tensor);
+    if (!status.ok()) return status;
 
     CHECK(op_record->out_tensor);
     CHECK(op_record->in_tensor);
@@ -300,6 +335,18 @@ void PerformCollectiveOp(OpRecord* op_record,
                                       absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()),
                                       op_record->out_tensor);
         break;
+      case message::DataType_TF_INT64:
+        status = AllgathervCpu<int64_t>(op_record->in_tensor,
+                                        absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()),
+                                        op_record->out_tensor);
+        break;
+      case message::DataType_TF_FLOAT64:
+        status = AllgathervCpu<double>(op_record->in_tensor,
+                                       absl::Span<int32_t>(first_rank_sizes.data(), first_rank_sizes.size()),
+                                       op_record->out_tensor);
+        break;
+      default:
+        LOG(FATAL) << "Unsupported type found: " << dtype;
     }
 
     MPI_LOG << "#rank" << mpi_rank() << " Finished collective op";
@@ -309,11 +356,7 @@ void PerformCollectiveOp(OpRecord* op_record,
 
   CHECK(op_record->out_tensor);
 
-  if (status.ok()) {
-    op_record->callback(*op_record->out_tensor);
-  } else {
-    op_record->callback(status);
-  }
+  return status;
 }
 
 void BackgroundThreadLoop() {
@@ -368,6 +411,7 @@ void BackgroundThreadLoop() {
           }
 
           if (response_type == message::ResponseType_ERROR) {
+            LOG(FATAL) << error_message;
             auto status = tensorflow::errors::FailedPrecondition(error_message);
             tensor_table[tensor_name].callback(status);
             return;
@@ -383,10 +427,12 @@ void BackgroundThreadLoop() {
 
           OpRecord* op_record = CollectiveState::Global().LookupOpRecordGuarded(tensor_name);
           CHECK(op_record);
-          PerformCollectiveOp(op_record, response_type, tensor_name, error_message);
-
-          CHECK(op_record->callback);
-          op_record->callback(*op_record->out_tensor);
+          auto status = PerformCollectiveOp(op_record, response_type, tensor_name, error_message);
+          if (status.ok()) {
+            op_record->callback(*op_record->out_tensor);
+          } else {
+            op_record->callback(status);
+          }
 
           CollectiveState::Global().EraseOpRecordGuarded(tensor_name);
         };
@@ -454,11 +500,18 @@ void BackgroundThreadLoop() {
 
       auto* op_record = CollectiveState::Global().LookupOpRecordGuarded(name);
       CHECK(op_record);
-      PerformCollectiveOp(
+      auto status = PerformCollectiveOp(
           op_record, response.msg().response_type(), response.msg().tensor_name()->str(), error_message);
+      if (status.ok()) {
+        op_record->callback(*op_record->out_tensor);
+      } else {
+        op_record->callback(status);
+      }
 
-      // Clear all the requests for this tensor.
+      // Clear all the requests for this tensor in the coordinator.
       message_table->at(name).clear();
+      // TODO share the logic after the done is called between coordinator and other workers.
+      CollectiveState::Global().EraseOpRecordGuarded(name);
     }
 
   } while (!CollectiveState::Global().shut_down);

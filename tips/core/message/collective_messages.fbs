@@ -17,7 +17,9 @@ enum ResponseType : short {
 enum DataType : short {
   TF_UNK = -1,
   TF_FLOAT32 = 0,
-  TF_INT32 = 1,
+  TF_FLOAT64 = 1,
+  TF_INT32 = 2,
+  TF_INT64 = 3,
 }
 
 table RequestMessage {

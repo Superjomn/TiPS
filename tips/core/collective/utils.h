@@ -26,18 +26,23 @@ enum class CollectiveOpKind {
 
 MPI_Op CollectiveOpKindToMpiOp(CollectiveOpKind op);
 
-static Status TF_DataTypeToMessageDataType(tensorflow::DataType dtype, message::DataType* out) {
+static void TF_DataTypeToMessageDataType(tensorflow::DataType dtype, message::DataType* out) {
   switch (dtype) {
     case tensorflow::DataType::DT_FLOAT:
       *out = message::DataType_TF_FLOAT32;
       break;
+    case tensorflow::DataType::DT_DOUBLE:
+      *out = message::DataType_TF_FLOAT64;
+      break;
     case tensorflow::DataType::DT_INT32:
       *out = message::DataType_TF_INT32;
       break;
+    case tensorflow::DataType::DT_INT64:
+      *out = message::DataType_TF_INT64;
+      break;
     default:
-      return tensorflow::errors::FailedPrecondition("Unknown type found");
+      LOG(FATAL) << "Not supported dtype found: " << dtype;
   }
-  return Status::OK();
 }
 
 /**
@@ -46,8 +51,9 @@ static Status TF_DataTypeToMessageDataType(tensorflow::DataType dtype, message::
  */
 template <typename dtype>
 Status AllreduceCpu(const Tensor* input, Tensor* output, CollectiveOpKind op) {
-  CHECK(output->shape() == input->shape());
-  CHECK(input->dtype() == output->dtype());
+  CHECK(output);
+  CHECK(output->shape() == input->shape()) << input->DebugString() << " vs " << output->DebugString();
+  CHECK(input->dtype() == output->dtype()) << input->dtype() << " vs " << output->dtype();
 
   // TODO(Superjomn) try the inplace way.
   // TODO(Superjomn) try the compress way(float16?)

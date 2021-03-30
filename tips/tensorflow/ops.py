@@ -25,6 +25,10 @@ MPI_LIB = _load_library('libtipscore.so')
 
 tips_basics = TipsBasics("libtipscore.so")
 
+size = tips_basics.size
+rank = tips_basics.rank
+shutdown = tips_basics.shutdown
+
 
 def _normialize_name(name):
     """Normalizes operation name to TensorFlow rules."""
@@ -56,6 +60,8 @@ ops.NotDifferentiable("MPIRank")
 
 def allreduce_op(tensor, name=None):
     """An op which sums an input tensor over all the MPI processes."""
+    if name is None and not executing_eagerly():
+        name = 'TipsAllreduce_%s' % _normialize_name(tensor.name)
     return MPI_LIB.mpi_allreduce(tensor, name=name)
 
 
@@ -64,6 +70,8 @@ ops.NotDifferentiable("MPIAllreduce")
 
 def allgather_op(tensor, name=None):
     """An op which broadcast an input tensor over all the MPI processes."""
+    if name is None and not executing_eagerly():
+        name = 'TipsAllgather_%s' % _normialize_name(tensor.name)
     return MPI_LIB.mpi_allgather(tensor, name=name)
 
 
@@ -72,6 +80,8 @@ ops.NotDifferentiable("MPIAllgather")
 
 def broadcast_op(tensor, root_rank=0, name=None):
     """An op which broadcast an input tensor over all the MPI processes."""
+    if name is None and not executing_eagerly():
+        name = 'TipsBroadcast_%s' % _normialize_name(tensor.name)
     return MPI_LIB.mpi_broadcast(tensor, name=name, root_rank=root_rank)
 
 

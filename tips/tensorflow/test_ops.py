@@ -36,7 +36,7 @@ class TensorFlowTests(tf.test.TestCase):
         with tf.device("/cpu:0"):
             tensor = self._random_uniform(
                 [3] * dim, -100, 100, dtype=tf.float32)
-            summed = tips_ops.allreduce_op(tensor)
+            summed = tips_ops.allreduce_op(tensor, name="allreduce__")
             print(summed)
 
     def test_tips_allgather_cpu(self):
@@ -56,6 +56,22 @@ class TensorFlowTests(tf.test.TestCase):
             tensor = tf.constant(rank, tf.float32, [4, 3, 3])
             gathered = tips_ops.broadcast_op(tensor)
             print(gathered)
+
+    def test_tips_broadcast_scalar_cpu(self):
+        with tf.device("/cpu:0"):
+            i64 = tf.constant(tips_ops.rank(), tf.int64, [])
+            dbl = tf.constant(tips_ops.rank(), tf.float64, [])
+            gathered = tips_ops.broadcast_op(i64, name="i64_broadcast")
+            print(gathered)
+            #gathered = tips_ops.broadcast_op(i64, name="i64_broadcast")
+            gathered1 = tips_ops.broadcast_op(dbl, name="double_broadcast")
+
+    def test_tips_allreduce_scalar_cpu(self):
+        with tf.device("/cpu:0"):
+            i64 = tf.constant(tips_ops.rank(), tf.int64, [], name="a")
+            dbl = tf.constant(tips_ops.rank(), tf.float64, [])
+            gathered = tips_ops.allreduce_op(i64)
+            gathered1 = tips_ops.allreduce_op(dbl)
 
     def _random_uniform(self, *args, **kwargs):
         if hasattr(tf, 'random') and hasattr(tf.random, 'set_seed'):
