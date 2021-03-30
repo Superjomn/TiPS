@@ -257,8 +257,9 @@ Status PerformCollectiveOp(OpRecord* op_record,
 
   if (response_type == message::ResponseType_ALLREDUCE) {
     MPI_LOG << "allreducing";
-    LOG(INFO) << "input: " << op_record->in_tensor->DebugString();
-    LOG(INFO) << "output: " << op_record->out_tensor->DebugString();
+    LOG(INFO) << "input: " << op_record->in_tensor << " " << op_record->in_tensor->DebugString();
+    LOG(INFO) << "output: " << op_record->out_tensor;
+    LOG(INFO) << " " << op_record->out_tensor->DebugString();
     CHECK(op_record->out_tensor);
     switch (dtype) {
       case message::DataType_TF_INT32:
@@ -507,8 +508,10 @@ void BackgroundThreadLoop() {
         op_record->callback(status);
       }
 
-      // Clear all the requests for this tensor.
+      // Clear all the requests for this tensor in the coordinator.
       message_table->at(name).clear();
+      // TODO share the logic after the done is called between coordinator and other workers.
+      CollectiveState::Global().EraseOpRecordGuarded(name);
     }
 
   } while (!CollectiveState::Global().shut_down);

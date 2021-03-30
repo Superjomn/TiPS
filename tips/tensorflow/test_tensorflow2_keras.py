@@ -49,7 +49,7 @@ class Tf2KerasTests(tf.test.TestCase):
 
         # No assertions, we just need to verify that it doesn't hang or error
         callbacks = [BroadcastGlobalVariablesCallback(0)]
-        model.fit(x, y, steps_per_epoch=1, callbacks=callbacks, epochs=1)
+        model.fit(x, y, steps_per_epoch=10, callbacks=callbacks, epochs=1)
 
 
 if __name__ == '__main__':

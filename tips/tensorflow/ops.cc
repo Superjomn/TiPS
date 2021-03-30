@@ -18,8 +18,6 @@ Status IsMpiIntialized() {
   return Status::OK();
 }
 
-static int counter = 0;
-
 template <typename Device>
 class MpiSizeOp : public tensorflow::OpKernel {
  public:
@@ -90,10 +88,7 @@ class MpiAllreduceOp : public AsyncOpKernel {
     const auto* input_tensor = &context->input(0);
     Tensor* output_tensor;
     OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, input_tensor->shape(), &output_tensor), done);
-    MPI_LOG << "allreduce allocated output_tensor: " << output_tensor << " " << output_tensor->DebugString();
-    MPI_LOG << input_tensor->DebugString() << " vs " << output_tensor->DebugString();
 
-    MPI_LOG << "******** running op: " << name() << " " << this;
     OpRecord record;
     record.name       = name();
     record.op_context = context;
@@ -169,7 +164,6 @@ class MpiAllgatherOp : public AsyncOpKernel {
     OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
     const auto* input_tensor = &context->input(0);
 
-    LOG(INFO) << "running op: " << name();
     OpRecord record;
     record.name       = name();
     record.op_context = context;
@@ -228,20 +222,15 @@ class MpiBroadcastOp : public AsyncOpKernel {
   void ComputeAsync(OpKernelContext* context, DoneCallback done) override {
     OP_REQUIRES_OK_ASYNC(context, IsMpiIntialized(), done);
 
-    auto node_name = name() + "_" + std::to_string(counter++);
+    auto node_name = name();
     auto device    = GetDeviceID(context);
     auto tensor    = context->input(0);
-
-    MPI_LOG << "******** running op: " << name() << " " << this;
-    MPI_LOG << "input tensor: " << tensor.DebugString();
-    MPI_LOG << "output tensor: " << tensor.DebugString();
 
     OpRecord record;
 
     if (mpi_rank() == root_rank_) {
       context->set_output(0, tensor);
       record.out_tensor = context->mutable_output(0);
-      LOG(INFO) << "root output: " << tensor.DebugString() << " vs " << record.out_tensor->DebugString();
     } else {
       OP_REQUIRES_OK_ASYNC(context, context->allocate_output(0, tensor.shape(), &record.out_tensor), done);
     }
@@ -254,7 +243,6 @@ class MpiBroadcastOp : public AsyncOpKernel {
     TF_DataTypeToMessageDataType(tensor.dtype(), &record.dtype);
 
     record.callback = [done, context, node_name](StatusOr<Tensor> status) {
-      LOG(INFO) << "************** done for " << node_name << " called";
       context->SetStatus(status.status());
       done();
     };

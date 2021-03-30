@@ -34,10 +34,10 @@ class BroadcastGlobalVariablesCallbackImpl(object):
         with tf.device(self.device):
             if tips.executing_eagerly() and hasattr(self.model, 'variables'):
                 # TensorFlow 2.0 or TensorFlow eager
-                tips.broadcast_variables(self.model.variables,
-                                        root_rank=self.root_rank)
-                tips.broadcast_variables(self.model.optimizer.variables(),
-                                        root_rank=self.root_rank)
+                tips.broadcast_variables(
+                    self.model.variables, root_rank=self.root_rank)
+                tips.broadcast_variables(
+                    self.model.optimizer.variables(), root_rank=self.root_rank)
             else:
                 bcast_op = tips.broadcast_global_variables(self.root_rank)
                 self.backend.get_session().run(bcast_op)
@@ -92,8 +92,16 @@ class MetricAverageCallbackImpl(object):
 
 
 class LearningRateScheduleCallbackImpl(object):
-    def __init__(self, backend, initial_lr, multiplier, start_epoch=0, end_epoch=None, staircase=True,
-                 momentum_correction=True, steps_per_epoch=None, *args):
+    def __init__(self,
+                 backend,
+                 initial_lr,
+                 multiplier,
+                 start_epoch=0,
+                 end_epoch=None,
+                 staircase=True,
+                 momentum_correction=True,
+                 steps_per_epoch=None,
+                 *args):
         super(LearningRateScheduleCallbackImpl, self).__init__(*args)
         self.backend = backend
         self.start_epoch = start_epoch
@@ -122,25 +130,29 @@ class LearningRateScheduleCallbackImpl(object):
             # Compute the number of steps per epoch using # of samples and a batch size.
             return self.params['samples'] // self.params['batch_size']
         else:
-            raise ValueError('Could not autodetect the number of steps per epoch. '
-                             'Please specify the steps_per_epoch parameter to the '
-                             '%s() or upgrade to the latest version of Keras.'
-                             % self.__class__.__name__)
+            raise ValueError(
+                'Could not autodetect the number of steps per epoch. '
+                'Please specify the steps_per_epoch parameter to the '
+                '%s() or upgrade to the latest version of Keras.' %
+                self.__class__.__name__)
 
     def _adjust_learning_rate(self, epoch):
         old_lr = self.backend.get_value(self.model.optimizer.lr)
         new_lr = self.initial_lr * self.multiplier(epoch)
         self.backend.set_value(self.model.optimizer.lr, new_lr)
 
-        if hasattr(self.model.optimizer, 'momentum') and self.momentum_correction:
+        if hasattr(self.model.optimizer,
+                   'momentum') and self.momentum_correction:
             # See the paper cited above for more information about momentum correction.
-            self.restore_momentum = self.backend.get_value(self.model.optimizer.momentum)
+            self.restore_momentum = self.backend.get_value(
+                self.model.optimizer.momentum)
             self.backend.set_value(self.model.optimizer.momentum,
                                    self.restore_momentum * new_lr / old_lr)
 
     def _restore_momentum_if_needed(self):
         if self.restore_momentum:
-            self.backend.set_value(self.model.optimizer.momentum, self.restore_momentum)
+            self.backend.set_value(self.model.optimizer.momentum,
+                                   self.restore_momentum)
             self.restore_momentum = None
 
     def on_train_begin(self, logs=None):
@@ -153,8 +165,9 @@ class LearningRateScheduleCallbackImpl(object):
         self.current_epoch = epoch
 
     def on_batch_begin(self, batch, logs=None):
-        if (self.current_epoch < self.start_epoch or
-                (self.end_epoch is not None and self.current_epoch >= self.end_epoch)):
+        if (self.current_epoch < self.start_epoch
+                or (self.end_epoch is not None
+                    and self.current_epoch >= self.end_epoch)):
             # Outside of the adjustment scope.
             return
 
@@ -175,23 +188,38 @@ class LearningRateScheduleCallbackImpl(object):
 
 
 class LearningRateWarmupCallbackImpl(LearningRateScheduleCallbackImpl):
-    def __init__(self, backend, initial_lr, warmup_epochs=5, momentum_correction=True, steps_per_epoch=None,
-                 verbose=0, *args):
+    def __init__(self,
+                 backend,
+                 initial_lr,
+                 warmup_epochs=5,
+                 momentum_correction=True,
+                 steps_per_epoch=None,
+                 verbose=0,
+                 *args):
         def multiplier(epoch):
             # Adjust epoch to produce round numbers at the end of each epoch, so that TensorBoard
             # learning rate graphs look better.
             epoch += 1. / self.steps_per_epoch
-            return 1. / tips.size() * (epoch * (tips.size() - 1) / warmup_epochs + 1)
+            return 1. / tips.size() * (epoch *
+                                       (tips.size() - 1) / warmup_epochs + 1)
+
         super(LearningRateWarmupCallbackImpl, self).__init__(
-            backend, initial_lr, multiplier, start_epoch=0, end_epoch=warmup_epochs, staircase=False,
-            momentum_correction=momentum_correction, steps_per_epoch=steps_per_epoch,
+            backend,
+            initial_lr,
+            multiplier,
+            start_epoch=0,
+            end_epoch=warmup_epochs,
+            staircase=False,
+            momentum_correction=momentum_correction,
+            steps_per_epoch=steps_per_epoch,
             *args)
         self.verbose = verbose
 
     def on_epoch_end(self, epoch, logs=None):
         super(LearningRateWarmupCallbackImpl, self).on_epoch_end(epoch, logs)
 
-        if epoch == self.end_epoch - 1 and self.verbose > 0 and tips.rank() == 0:
+        if epoch == self.end_epoch - 1 and self.verbose > 0 and tips.rank(
+        ) == 0:
             new_lr = self.backend.get_value(self.model.optimizer.lr)
             print('\nEpoch %d: finished gradual learning rate warmup to %g.' %
                   (epoch + 1, new_lr))
