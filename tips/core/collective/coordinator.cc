@@ -244,8 +244,6 @@ Status PerformCollectiveOp(OpRecord* op_record,
                            message::ResponseType response_type,
                            const std::string name,
                            const std::string& error_msg) {
-  MPI_LOG << "Perform collective for " << op_record->name;
-
   if (response_type != message::ResponseType_ALLREDUCE && response_type != message::ResponseType_ALLGATHER &&
       response_type != message::ResponseType_BROADCAST && response_type != message::ResponseType_ERROR) {
     LOG(ERROR) << "Unsupported response_type found " << response_type;
@@ -257,9 +255,6 @@ Status PerformCollectiveOp(OpRecord* op_record,
 
   if (response_type == message::ResponseType_ALLREDUCE) {
     MPI_LOG << "allreducing";
-    LOG(INFO) << "input: " << op_record->in_tensor << " " << op_record->in_tensor->DebugString();
-    LOG(INFO) << "output: " << op_record->out_tensor;
-    LOG(INFO) << " " << op_record->out_tensor->DebugString();
     CHECK(op_record->out_tensor);
     switch (dtype) {
       case message::DataType_TF_INT32:
@@ -279,9 +274,7 @@ Status PerformCollectiveOp(OpRecord* op_record,
     }
   } else if (response_type == message::ResponseType_BROADCAST) {
     MPI_LOG << "broadcasting " << op_record->name;
-    LOG(INFO) << "output: " << op_record->out_tensor->DebugString();
     CHECK(op_record->out_tensor);
-    LOG(INFO) << op_record->name << " op_record.output.shape: " << op_record->out_tensor->DebugString();
     switch (dtype) {
       case message::DataType_TF_INT32:
         // NOTE root_rank should be passed in.
