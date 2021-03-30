@@ -10,6 +10,8 @@ core_gather_srcs(SRCS
         channel.cc
         flatbuffers_utils.cc
         logging.cc
+        thread_group.cc
+        rwlock.cc
         )
 
 cc_test(test_naive_buffer SRCS naive_buffer_test.cc DEPS tipscore)

@@ -1,5 +1,5 @@
-//
-// Created by chunwei on 3/14/21.
-//
+#include "tips/core/ps/sparse_table.h"
 
-#include "sparse_table.h"
+namespace tips {
+namespace ps {}  // namespace ps
+}  // namespace tips

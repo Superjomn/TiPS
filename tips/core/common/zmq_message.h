@@ -41,7 +41,7 @@ class ZmqMessage {
 
   zmq_msg_t* zmq_msg() { return &data_; }
 
-  SWIFTS_DISALLOW_COPY_AND_ASSIGN(ZmqMessage)
+  TIPS_DISALLOW_COPY_AND_ASSIGN(ZmqMessage)
 
  private:
   zmq_msg_t data_;
