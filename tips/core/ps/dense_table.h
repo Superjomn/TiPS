@@ -9,15 +9,34 @@ namespace ps {
 
 template <typename T>
 struct alignas(64) DenseTableShard {
-  using value_type = T;
+  using record_type = T;
 
   absl::Span<T> data() { return absl::Span<T>(data_.data(), data_.size()); }
   absl::Span<const T> data() const { return absl::Span<T>(data_.data(), data_.size()); }
-  void SetData(absl::Span<const T> d) { data_.assign(d.data(), d.size()); }
+  void SetData(absl::Span<const T> d) {
+    data_.resize(d.size());
+    for (int i = 0; i < d.size(); i++) {
+      data_[i] = d[i];
+    }
+  }
   void SetData(std::vector<T>&& d) { data_ = std::move(d); }
 
+  record_type* Lookup(size_t offset) {
+    if (offset < data_.size()) {
+      return &data_[offset];
+    }
+    return nullptr;
+  }
+
+  const record_type* Lookup(size_t offset) const {
+    if (offset < data_.size()) {
+      return &data_[offset];
+    }
+    return nullptr;
+  }
+
  private:
-  std::vector<T> data_;
+  std::vector<record_type> data_;
 };
 
 /**
@@ -29,30 +48,52 @@ struct alignas(64) DenseTableShard {
 template <typename T>
 class DenseTable : public Table {
  public:
-  using key_type   = size_t;
-  using value_type = T;
-  using shard_type = DenseTableShard<T>;
+  using key_type    = size_t;
+  using record_type = T;
+  using shard_type  = DenseTableShard<T>;
 
-  DenseTable() { local_shards_.reset(new shard_type[local_shard_num()]); }
+  DenseTable() {
+    local_shards_.reset(new shard_type[local_shard_num()]);
+    mpi_barrier();
+  }
+  ~DenseTable() { mpi_barrier(); }
 
   shard_type& local_shard(int i) { return local_shards_[i]; }
-  shard_type& shard(int i) { return local_shard(Table::Global().shard(i).local_shard_id); }
+  const shard_type& local_shard(int i) const { return local_shards_[i]; }
+
+  shard_type& shard(int i) { return local_shard(shard_info(i).local_shard_id); }
+  const shard_type& shard(int i) const { return local_shard(shard_info(i).local_shard_id); }
+
   size_t shard_boundary(int shard_id) const { return boundaries_[shard_id]; }
+
   size_t size() const { return size_; }
+
+  const record_type* Lookup(key_t key) const {
+    int part     = size() / shard_num();
+    int shard_id = key / part;
+    return shard(shard_id).Lookup(key - shard_boundary(shard_id));
+  }
+
+  record_type* Lookup(key_t key) {
+    int part     = size() / shard_num();
+    int shard_id = key / part;
+    return shard(shard_id).Lookup(key - shard_boundary(shard_id));
+  }
 
   void Resize(size_t size) {
     mpi_barrier();
     size_ = size;
     boundaries_.resize(shard_num() + 1);
 
+    CHECK_GT(shard_num(), 0);
     for (int i = 0; i <= shard_num(); i++) {
       boundaries_[i] = i * size / shard_num();
     }
 
     for (int i = 0; i < local_shard_num(); i++) {
-      int shard_id = Table::Global().local_shard(i).shard_id;
+      int shard_id = local_shard_info(i).shard_id;
       std::vector<T> new_data(boundaries_[shard_id + 1] - boundaries_[shard_id]);
-      local_shards_[i].ResetData(new_data);
+      local_shards_[i].SetData(new_data);
     }
 
     mpi_barrier();
@@ -63,14 +104,20 @@ class DenseTable : public Table {
     mpi_barrier();
 
     for (int i = 0; i < local_shard_num(); i++) {
-      value_type* data = &local_shard(i).data()[0];
-      int shard_id     = Table::Global().local_shard(i).shard_id;
-      size_t first     = boundaries_[shard_id];
-      size_t last      = boundaries_[shard_id + 1];
+      record_type* data = &local_shard(i).data()[0];
+      int shard_id      = local_shard(i).shard_id;
+      size_t first      = boundaries_[shard_id];
+      size_t last       = boundaries_[shard_id + 1];
       CHECK_EQ(local_shard(i).data.size(), last - first);
 
-      client_channel().Write([data, first, &func] { LOG(FATAL) << "Not implemented"; });
+      ParallelRunRange(last - first /*n*/, [data, first, &func](int tid, size_t start, size_t end) {
+        for (size_t j = start; j != end; j++) {
+          func(tid, first + j, data[j]);
+        }
+      });
     }
+
+    mpi_barrier();
   }
 
   void Load(const std::string& path);

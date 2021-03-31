@@ -127,15 +127,17 @@ class SparseTable {
   /**
    * output parameters to ostream
    */
-  void Output() {
+  std::string ToStr() {
+    std::stringstream ss;
     for (int i = 0; i < num_shards(); i++) {
-      std::cout << shard(i);
+      ss << shard(i);
     }
+    return ss.str();
   }
   /**
    * output to a local file
    */
-  void Output(const std::string &path) {
+  void WriteToFile(const std::string &path) {
     std::ofstream file(path.c_str(), std::ios::out);
     for (int i = 0; i < num_shards(); i++) {
       file << shard(i);

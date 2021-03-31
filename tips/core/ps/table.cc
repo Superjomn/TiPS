@@ -6,7 +6,11 @@ namespace ps {
 void Table::Initialize() {
   mpi_barrier();
   CHECK(!Initialized()) << "Duplicate initializing Table found";
-  CHECK_GT(local_shard_num_, 0);
+  CHECK_GT(mpi_size(), 0);
+  set_local_shrard_num(TABLE_SHARD_NUM);
+  LOG(INFO) << "mpi_size: " << mpi_size();
+  LOG(INFO) << "local_shard_num: " << local_shard_num_;
+
   shard_num_ = mpi_size() * local_shard_num_;
   shards_.resize(shard_num_);
   local_shards_.resize(local_shard_num_);
@@ -56,7 +60,7 @@ void Table::Initialize() {
 
 void Table::Finalize() {
   mpi_barrier();
-  CHECK(!Initialized());
+  CHECK(Initialized());
 
   for (auto& channel : server_channels_) {
     channel->Close();
@@ -67,11 +71,6 @@ void Table::Finalize() {
   local_thread_group_.Join();
 
   mpi_barrier();
-}
-
-Table& Table::Global() {
-  static Table table;
-  return table;
 }
 
 }  // namespace ps

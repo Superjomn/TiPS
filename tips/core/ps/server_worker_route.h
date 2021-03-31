@@ -19,6 +19,9 @@ class ServerWorkerRoute {
   size_t num_servers() const { return server_ids_.size(); }
   size_t num_workers() const { return worker_ids_.size(); }
 
+  std::unordered_set<int> server_ids() const { return server_ids_; }
+  std::unordered_set<int> worker_ids() const { return worker_ids_; }
+
   static ServerWorkerRoute& Global() {
     static ServerWorkerRoute x;
     return x;

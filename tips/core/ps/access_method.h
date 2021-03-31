@@ -10,7 +10,7 @@ namespace tips {
 namespace ps {
 
 /**
- * @brief Base definition of parameter pull methods
+ * PullAccessMethod defines an Interface for pulling operation on a Table.
  */
 template <typename Key, typename Param, typename PullVal>
 class PullAccessMethod {
@@ -30,6 +30,9 @@ class PullAccessMethod {
   virtual void GetPullValue(const key_t &key, const param_t &param, pull_val_t &val) = 0;
 };
 
+/**
+ * PullAccessMethod defines an Interface for pushing operation on a Table.
+ */
 template <typename Key, typename Param, typename Grad>
 class PushAccessMethod {
  public:

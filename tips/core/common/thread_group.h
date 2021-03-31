@@ -21,6 +21,9 @@ class ThreadGroup {
     SetThreadNum(thread_num);
   }
 
+  /**
+   * Resize the number of threads.
+   */
   void SetThreadNum(int thread_num) {
     CHECK_GE(thread_num, 1) << "At least 1 thread is required for a ThreadGroup";
     CHECK(!func_);
@@ -47,6 +50,11 @@ class ThreadGroup {
     }
   }
 
+  void Run(const task_t& func) {
+    Start(func);
+    Join();
+  }
+
   void Join() {
     CHECK(func_);
     for (auto& t : threads_) {
@@ -54,6 +62,14 @@ class ThreadGroup {
     }
 
     func_ = nullptr;
+  }
+
+  /**
+   * Thread local singleton.
+   */
+  static ThreadGroup& GetThreadLocal() {
+    thread_local ThreadGroup g;
+    return g;
   }
 
   void Barrier() { barrier_->Block(); }
@@ -70,5 +86,22 @@ class ThreadGroup {
   std::vector<ManagedThread> threads_;
   std::unique_ptr<absl::Barrier> barrier_;
 };
+
+template <typename Func>
+void ParallelRunRange(size_t n, Func&& func, ThreadGroup& thread_group = ThreadGroup::GetThreadLocal()) {
+  int num_threads = thread_group.num_threads();
+  thread_group.Run([n, &func, num_threads](int tid) {
+    if (n < num_threads) {
+      if (tid < n) {
+        func(tid, tid, tid + 1);
+      }
+    } else {
+      size_t part = (n + num_threads) / num_threads;
+      if (part * tid < n) {
+        func(tid, part * tid, std::min(part * (tid + 1), n));
+      }
+    }
+  });
+}
 
 }  // namespace tips

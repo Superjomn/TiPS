@@ -12,6 +12,7 @@ core_gather_srcs(SRCS
         logging.cc
         thread_group.cc
         rwlock.cc
+        vec.cc
         )
 
 cc_test(test_naive_buffer SRCS naive_buffer_test.cc DEPS tipscore)
@@ -22,3 +23,4 @@ cc_binary(test_naive_rpc SRCS naive_rpc_test.cc DEPS tipscore)
 mpi_test(test_naive_rpc 3)
 
 cc_test(test_flatbuffers_utils SRCS flatbuffers_utils_test.cc DEPS tipscore)
+cc_test(test_thread_group SRCS thread_group_test.cc DEPS tipscore)
