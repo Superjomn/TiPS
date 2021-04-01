@@ -1,5 +1,8 @@
 #pragma once
 
+#include <absl/container/flat_hash_map.h>
+#include <absl/container/inlined_vector.h>
+#include <absl/hash/hash.h>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -8,9 +11,15 @@
 
 #include "tips/core/common/common.h"
 #include "tips/core/common/rwlock.h"
+#include "tips/core/ps/table.h"
 
 namespace tips {
 namespace ps {
+
+template <typename T>
+size_t ToHashValue(const T &x) {
+  return absl::Hash<T>{}(x);
+}
 
 /**
  * @brief shard of SparseTable
@@ -30,11 +39,11 @@ struct alignas(64) SparseTableShard {
  public:
   using key_t   = KEY;
   using value_t = VALUE;
-  using map_t   = std::unordered_map<key_t, value_t>;
+  using map_t   = absl::flat_hash_map<key_t, value_t>;
 
-  SparseTableShard() { data().set_empty_key(std::numeric_limits<key_t>::max()); }
+  SparseTableShard() {}
 
-  bool Find(const key_t &key, value_t *&val) const {
+  bool Find(const key_t &key, value_t *&val) {
     RwLockReadGuard lock(rwlock_);
     auto it = data().find(key);
     if (it == data().end()) return false;
@@ -83,6 +92,7 @@ struct alignas(64) SparseTableShard {
  protected:
   // not thread safe!
   map_t &data() { return data_; }
+  const map_t &data() const { return data_; }
 
  private:
   map_t data_;
@@ -97,68 +107,71 @@ struct alignas(64) SparseTableShard {
  * parameters.
  */
 template <typename Key, typename Value>
-class SparseTable {
+class SparseTable : public Table {
  public:
   typedef Key key_t;
   typedef Value value_t;
+  using param_t = value_t;
   typedef SparseTableShard<key_t, value_t> shard_t;
 
-  SparseTable(int shard_num) {
-    num_shards_ = shard_num;
-    shards_.reset(new shard_t[num_shards()]);
+  SparseTable() { local_shards_.resize(local_shard_num()); }
+
+  shard_t &local_shard(int shard_id) {
+    CHECK_LT(shard_id, local_shard_num());
+    return local_shards_[shard_id];
   }
 
-  shard_t &shard(int shard_id) { return shards_[shard_id]; }
-
   bool Find(const key_t &key, value_t *&val) {
-    int shard_id = ToShardId(key);
-    return shard(shard_id).Find(key, val);
+    int shard_id       = ToShardId(key);
+    int local_shard_id = ToHashValue(key) % local_shard_num();
+    return local_shard(local_shard_id).Find(key, val);
   }
 
   bool Find(const key_t &key, value_t &val) {
-    int shard_id = ToShardId(key);
-    return shard(shard_id).Find(key, val);
+    int shard_id       = ToShardId(key);
+    int local_shard_id = ToHashValue(key) % local_shard_num();
+    return local_shard(local_shard_id).Find(key, val);
   }
 
   void Assign(const key_t &key, const value_t &val) {
     int shard_id = ToShardId(key);
-    shard(shard_id).Assign(key, val);
+    local_shard(shard_id).Assign(key, val);
   }
+
   /**
    * output parameters to ostream
    */
-  std::string ToStr() {
+  std::string __str__() {
     std::stringstream ss;
-    for (int i = 0; i < num_shards(); i++) {
-      ss << shard(i);
+    for (int i = 0; i < shard_num(); i++) {
+      ss << local_shard(i);
     }
     return ss.str();
   }
+
   /**
    * output to a local file
    */
   void WriteToFile(const std::string &path) {
     std::ofstream file(path.c_str(), std::ios::out);
-    for (int i = 0; i < num_shards(); i++) {
-      file << shard(i);
+    for (int i = 0; i < shard_num(); i++) {
+      file << local_shard(i);
     }
   }
 
   size_t size() const {
     size_t res = 0;
-    for (int i = 0; i < num_shards(); i++) {
-      auto &shard = shards_[i];
+    for (int i = 0; i < shard_num(); i++) {
+      auto &shard = local_shards_[i];
       res += shard.size();
     }
     return res;
   }
   // TODO assign protected
-  int ToShardId(const key_t &key) { return get_hash_code(key) % num_shards(); }
-  int num_shards() const { return num_shards_; }
+  int ToShardId(const key_t &key) { return ToHashValue(key) % shard_num(); }
 
  private:
-  std::unique_ptr<shard_t[]> shards_;
-  int num_shards_ = 1;
+  absl::InlinedVector<shard_t, 4> local_shards_;
 };  // class SparseTable
 
 }  // namespace ps
