@@ -1,9 +1,14 @@
 #pragma once
+#include <absl/container/flat_hash_map.h>
+#include <absl/container/flat_hash_set.h>
+#include <absl/container/inlined_vector.h>
+#include <mpi.h>
 #include <unordered_set>
 #include <vector>
 
 #include "tips/core/common/common.h"
 #include "tips/core/common/rwlock.h"
+#include "tips/core/mpi/tips_mpi.h"
 
 namespace tips {
 namespace ps {
