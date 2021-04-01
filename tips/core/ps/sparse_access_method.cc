@@ -1,4 +1,4 @@
-#include "tips/core/ps/dense_table.h"
+#include "tips/core/ps/sparse_access_method.h"
 
 namespace tips {
 namespace ps {}  // namespace ps

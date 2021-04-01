@@ -68,7 +68,7 @@ class RpcService {
 
   RpcCallback& callback() { return callback_; }
 
-  SWIFTS_DISALLOW_COPY_AND_ASSIGN(RpcService)
+  TIPS_DISALLOW_COPY_AND_ASSIGN(RpcService)
 
   friend class RpcServer;
 
@@ -147,7 +147,7 @@ class RpcServer {
 
   ~RpcServer();
 
-  SWIFTS_DISALLOW_COPY_AND_ASSIGN(RpcServer)
+  TIPS_DISALLOW_COPY_AND_ASSIGN(RpcServer)
 
  private:
   int BindRandomPort();

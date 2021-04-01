@@ -1,10 +1,7 @@
-//
-// Created by chunwei on 3/14/21.
-//
+#pragma once
 
-#ifndef SWIFTSNAILS2_SERVER_H
-#define SWIFTSNAILS2_SERVER_H
+#include "tips/core/common/common.h"
 
-class server {};
-
-#endif  // SWIFTSNAILS2_SERVER_H
+namespace tips {
+namespace ps {}  // namespace ps
+}  // namespace tips
