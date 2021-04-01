@@ -1,5 +1,5 @@
-//
-// Created by chunwei on 3/14/21.
-//
+#include "tips/core/ps/server.h"
 
-#include "server.h"
+namespace tips {
+namespace ps {}  // namespace ps
+}  // namespace tips

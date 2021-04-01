@@ -29,4 +29,21 @@ void MpiGroup::Initialize() {
   }
 }
 
+void MpiGroup::AddRanks(absl::Span<int> &&ranks) {
+  CHECK(!initialized_);
+  for (int x : ranks) {
+    data_.insert(x);
+  }
+}
+
+bool MpiGroup::AddRank(int rank) {
+  CHECK(!initialized_);
+  auto res = data_.insert(rank);
+  return res.second;
+}
+
+void MpiGroup::AllReduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op) {
+  ZCHECK(MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, mpi_comm()));
+}
+
 }  // namespace tips

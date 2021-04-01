@@ -19,22 +19,13 @@ class MpiGroup {
    * @param rank A MPI rank.
    * @returns true if not duplicate or else.
    */
-  bool AddRank(int rank) {
-    CHECK(!initialized_);
-    auto res = data_.insert(rank);
-    return res.second;
-  }
+  bool AddRank(int rank);
 
-  bool valid() const { return initialized_ && mpi_comm_ != MPI_COMM_NULL; }
-
-  void AddRanks(absl::Span<int>&& ranks) {
-    CHECK(!initialized_);
-    for (int x : ranks) {
-      data_.insert(x);
-    }
-  }
+  void AddRanks(absl::Span<int>&& ranks);
 
   void Initialize();
+
+  bool valid() const { return initialized_ && mpi_comm_ != MPI_COMM_NULL; }
 
   MPI_Comm mpi_comm() const {
     CHECK(valid());
@@ -53,9 +44,7 @@ class MpiGroup {
 
   void Barrier() const { ZCHECK(MPI_Barrier(mpi_comm())); }
 
-  void AllReduce(void* sendbuf, void* recvbuf, int count, MPI_Datatype datatype, MPI_Op op) {
-    ZCHECK(MPI_Allreduce(sendbuf, recvbuf, count, datatype, op, mpi_comm()));
-  }
+  void AllReduce(void* sendbuf, void* recvbuf, int count, MPI_Datatype datatype, MPI_Op op);
 
   /**
    * Get the rank in MPI_COMM_WORLD
