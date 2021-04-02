@@ -26,6 +26,11 @@ void MpiGroup::Initialize() {
   if (MPI_COMM_NULL != mpi_comm_) {
     MPI_Comm_rank(mpi_comm_, &mpi_rank_);
     MPI_Comm_size(mpi_comm_, &mpi_size_);
+
+    // Collect the map from group_rank to world's rank.
+    int rank = ::tips::mpi_rank();
+    ZCHECK(MPI_Allgather(
+        &rank, 1, mpi_type_trait<int>::type(), &rank_order_[0], 1, mpi_type_trait<int>::type(), this->mpi_comm_));
   }
 }
 
