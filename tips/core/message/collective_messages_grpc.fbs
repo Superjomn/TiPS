@@ -36,3 +36,10 @@ table ResponseMessage {
   error_message: string;
   tensor_sizes: [int64];
 }
+
+table Empty {}
+
+rpc_service Collective {
+  RequestDo(RequestMessage): Empty;
+  WorkerDo(ResponseMessage): Empty;
+}

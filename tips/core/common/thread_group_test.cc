@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
-
 #include "tips/core/common/thread_group.h"
+
+#include <gtest/gtest.h>
 
 namespace tips {
 

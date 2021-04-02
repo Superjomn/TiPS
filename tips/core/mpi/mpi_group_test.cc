@@ -1,4 +1,5 @@
 #include "tips/core/mpi/mpi_group.h"
+
 #include "tips/core/operations.h"
 
 namespace tips {

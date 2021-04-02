@@ -1,6 +1,7 @@
 core_gather_srcs(SRCS
         utils.cc
         coordinator.cc
+        grpc_server.cc
         )
 
 cc_binary(test_collective_utils_allreduce SRCS utils_test.cc DEPS tipscore CXX_FLAGS -DTEST_ALLREDUCE)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+
 #include "tips/core/common/common.h"
 
 namespace tips {
