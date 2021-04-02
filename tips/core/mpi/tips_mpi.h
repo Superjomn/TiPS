@@ -1,6 +1,7 @@
 #pragma once
 #include <mpi.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #include "tips/core/common/logging.h"
 #include "tips/core/common/naive_buffer.h"
@@ -114,7 +115,7 @@ void mpi_broadcast(T* p, int count, int root) {
   }
 }
 
-inline void mpi_barrier() { MPI_Barrier(mpi_comm()); }
+// inline void mpi_barrier() { MPI_Barrier(mpi_comm()); }
 
 inline int mpi_size() {
   int size;
@@ -124,7 +125,9 @@ inline int mpi_size() {
 
 std::string mpi_rank_repr();
 
+void mpi_barrier(MPI_Comm comm = mpi_comm());
+
 }  // namespace tips
 
-#define MPI_LOG VLOG(2) << ::tips::mpi_rank_repr() << " "
-#define MPI_WARN VLOG(3) << ::tips::mpi_rank_repr() << " "
+#define MPI_LOG LOG(INFO) << ::tips::mpi_rank_repr() << " "
+#define MPI_WARN LOG(INFO) << ::tips::mpi_rank_repr() << " "

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <absl/synchronization/barrier.h>
+
 #include <functional>
 #include <memory>
 #include <thread>
 #include <vector>
+
 #include "tips/core/common/common.h"
 #include "tips/core/common/managed_thread.h"
 
