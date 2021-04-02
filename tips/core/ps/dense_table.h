@@ -1,6 +1,7 @@
 #pragma once
 
 #include <absl/types/span.h>
+
 #include "tips/core/common/common.h"
 #include "tips/core/ps/table.h"
 

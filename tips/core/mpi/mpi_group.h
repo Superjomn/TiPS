@@ -1,11 +1,11 @@
 #pragma once
 
-#include "tips/core/common/common.h"
-#include "tips/core/mpi/tips_mpi.h"
-
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/inlined_vector.h>
+
+#include "tips/core/common/common.h"
+#include "tips/core/mpi/tips_mpi.h"
 
 namespace tips {
 
@@ -58,15 +58,26 @@ class MpiGroup {
 
   int ToWorldRank() const { return ToWorldRank(this->mpi_rank()); }
 
+  ~MpiGroup() {
+    if (valid()) {
+      MPI_Comm_free(&mpi_comm_);
+    }
+
+    if (world_group_ != MPI_GROUP_NULL) MPI_Group_free(&world_group_);
+    if (my_group_ != MPI_GROUP_EMPTY) MPI_Group_free(&my_group_);
+  }
+
  private:
   bool initialized_{};
   absl::flat_hash_set<int> data_;
-  absl::flat_hash_map<int, int> rank_map_;
-  absl::InlinedVector<int, 6> rank_order_;
+  std::vector<int> rank_order_;
   MPI_Comm mpi_comm_{MPI_COMM_NULL};
 
-  int mpi_rank_{};
-  int mpi_size_{};
+  MPI_Group world_group_{MPI_GROUP_NULL};
+  MPI_Group my_group_{MPI_GROUP_NULL};
+
+  int mpi_rank_{-1};
+  int mpi_size_{-1};
 };
 
 }  // namespace tips

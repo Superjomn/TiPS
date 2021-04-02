@@ -52,4 +52,33 @@ int mpi_rank() {
 
 std::string mpi_rank_repr() { return absl::StrFormat("#rank-[%d/%d]", mpi_rank(), mpi_size()); }
 
+void mpi_barrier(MPI_Comm comm) {
+  // MPI_Barrier uses busy waiting. Try to avoid.
+  // MPI_Barrier(mpi_comm());
+
+  std::vector<MPI_Request> reqs(mpi_size(), MPI_REQUEST_NULL);
+  int dummy = 0;
+
+  for (int i = 0; i < mpi_size(); i++) {
+    MPI_Irecv(&dummy, 1, MPI_INT, i, 0, comm, &reqs[i]);
+  }
+
+  for (int i = 0; i < mpi_size(); i++) {
+    MPI_Send(&dummy, 1, MPI_INT, i, 0, comm);
+  }
+
+  for (int i = 0; i < mpi_size(); i++) {
+    for (unsigned long x = 1;; x = std::min(x * 2, 2000UL)) {
+      int flag = 0;
+      MPI_Test(&reqs[i], &flag, MPI_STATUSES_IGNORE);
+
+      if (flag) {
+        break;
+      }
+
+      usleep(x);
+    }
+  }
+}
+
 }  // namespace tips

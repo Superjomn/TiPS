@@ -12,6 +12,7 @@ MPI_Op CollectiveOpKindToMpiOp(CollectiveOpKind op) {
     case CollectiveOpKind::MIN:
       return MPI_MIN;
   }
+  return MPI_OP_NULL;
 }
 
 }  // namespace collective

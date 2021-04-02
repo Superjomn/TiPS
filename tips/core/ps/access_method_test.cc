@@ -1,5 +1,7 @@
 #include "tips/core/ps/access_method.h"
+
 #include <gtest/gtest.h>
+
 #include "tips/core/operations.h"
 #include "tips/core/ps/sparse_access_method.h"
 

@@ -4,28 +4,28 @@ namespace tips {
 
 void MpiGroup::Initialize() {
   CHECK(!initialized_) << "Duplicate initialization found";
+  CHECK(!data_.empty());
   initialized_ = true;
+
+  // Get the group of processes in MPI_COMM_WORLD
+  MPI_Comm_group(MPI_COMM_WORLD, &world_group_);
+
+  // The ranks of this group must sort, or MPI_Comm_create_group will hang.
   rank_order_.assign(data_.begin(), data_.end());
+  std::sort(rank_order_.begin(), rank_order_.end());
 
-  // create the target group
-  MPI_Group world_group;
-  MPI_Group my_group;
-  ZCHECK(MPI_Comm_group(::tips::mpi_comm(), &world_group));
-  ZCHECK(MPI_Group_incl(world_group, rank_order_.size(), rank_order_.data(), &my_group));
+  // Construct a group containing all of the prime ranks in world_group
+  MPI_Group_incl(world_group_, rank_order_.size(), rank_order_.data(), &my_group_);
 
-  // create the communicator
-  ZCHECK(MPI_Comm_create_group(::tips::mpi_comm(), my_group, 0, &mpi_comm_));
+  // Create a new communicator based on the group
+  MPI_Comm_create_group(MPI_COMM_WORLD, my_group_, 0, &mpi_comm_);
 
-  if (mpi_comm_ != MPI_COMM_NULL) {
-    ZCHECK(MPI_Comm_rank(mpi_comm_, &mpi_rank_));
-    ZCHECK(MPI_Comm_size(mpi_comm_, &mpi_size_));
-
-    int rank = ::tips::mpi_rank();
-
-    ZCHECK(MPI_Allgather(
-        &rank, 1, mpi_type_trait<int>::type(), &rank_order_[0], 1, mpi_type_trait<int>::type(), this->mpi_comm_));
-
-    CHECK_EQ(mpi_size_, data_.size());
+  // If this rank isn't in the new communicator, it will be
+  // MPI_COMM_NULL. Using MPI_COMM_NULL for MPI_Comm_rank or
+  // MPI_Comm_size is erroneous
+  if (MPI_COMM_NULL != mpi_comm_) {
+    MPI_Comm_rank(mpi_comm_, &mpi_rank_);
+    MPI_Comm_size(mpi_comm_, &mpi_size_);
   }
 }
 

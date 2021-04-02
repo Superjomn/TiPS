@@ -1,7 +1,8 @@
+#include "tips/core/ps/dense_table.h"
+
 #include <gtest/gtest.h>
 
 #include "tips/core/operations.h"
-#include "tips/core/ps/dense_table.h"
 
 namespace tips {
 namespace ps {
