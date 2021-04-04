@@ -23,6 +23,13 @@ class MpiGroup {
 
   void AddRanks(absl::Span<int>&& ranks);
 
+  template <typename Iterator>
+  void AddRanks(Iterator begin, Iterator end) {
+    for (auto it = begin; it != end; it++) {
+      AddRank(*it);
+    }
+  }
+
   void Initialize();
 
   bool valid() const { return initialized_ && mpi_comm_ != MPI_COMM_NULL; }

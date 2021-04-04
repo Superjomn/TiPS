@@ -1,6 +1,4 @@
-#pragma once
-
-#include "tips/core/common/common.h"
+#include "tips/core/ps/route.h"
 
 namespace tips {
 namespace ps {}  // namespace ps

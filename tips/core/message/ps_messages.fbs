@@ -21,7 +21,7 @@ table PullRequest {
 
 table KeyItem {
   key: uint64;
-  value: [char];
+  value: [uint8];
 }
 table PullResponse {
   meta: MessageMeta;
@@ -36,4 +36,5 @@ table PushRequest {
 
 table PushResponse {
   meta: MessageMeta;
+  data: [KeyItem];
 }

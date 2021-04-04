@@ -1,11 +1,11 @@
 core_gather_srcs(SRCS
         table.cc
         client.cc
-        server.cc
+        ps_server.cc
         dense_table.cc
         sparse_table.cc
         access_method.cc
-        server_worker_route.cc
+        route.cc
         dense_access_method.cc
         param.cc
         sparse_access_method.cc
