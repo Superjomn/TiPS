@@ -24,3 +24,4 @@ mpi_test(test_naive_rpc 3)
 
 cc_test(test_flatbuffers_utils SRCS flatbuffers_utils_test.cc DEPS tipscore)
 cc_test(test_thread_group SRCS thread_group_test.cc DEPS tipscore)
+cc_test(test_zmq_message SRCS zmq_message_test.cc DEPS tipscore)
