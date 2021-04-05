@@ -14,16 +14,22 @@ using namespace std::chrono_literals;
 using namespace test::test_message0;
 
 void TestRpc(RpcServer& server) {
-  RpcCallback callback = [&server](const RpcMsgHead& head, uint8_t* buffer) {
+  RpcCallback callback = [&server](ZmqMessage&& zmq_msg) {
+    const auto* head = GetMsgHead(zmq_msg);
+    auto* buffer     = GetMsgContent(zmq_msg);
+
+    CHECK(head);
+    CHECK(buffer);
+
     std::this_thread::sleep_for(500ms);
-    if (head.message_type == RpcMsgType::REQUEST) {
+    if (head->message_type == RpcMsgType::REQUEST) {
       LOG(INFO) << "server " << mpi_rank() << " get a request";
 
       RpcMsgHead response_head;
       response_head.server_id = mpi_rank();
-      response_head.client_id = head.client_id;
-      response_head.service   = head.service;
-      response_head.request   = head.request;
+      response_head.client_id = head->client_id;
+      response_head.service   = head->service;
+      response_head.request   = head->request;
 
       auto msg = flatbuffers::GetRoot<MessageRequest>(buffer);
 
@@ -43,12 +49,12 @@ void TestRpc(RpcServer& server) {
       }
     }
 
-    if (head.message_type == RpcMsgType::RESPONSE) {
+    if (head->message_type == RpcMsgType::RESPONSE) {
       LOG(INFO) << "server " << mpi_rank() << " get a response";
     }
   };
 
-  CHECK_EQ(mpi_size(), 3);
+  // CHECK_EQ(mpi_size(), 3);
   auto* service = server.AddService("test", callback);
 
   LOG(INFO) << "to Intialize server";
@@ -56,7 +62,7 @@ void TestRpc(RpcServer& server) {
   mpi_barrier();
 
   if (mpi_rank() == 0) {
-    RpcCallback callback = [&server](RpcMsgHead head, uint8_t* buf) {};
+    RpcCallback callback = [&server](ZmqMessage&& zmq_msg) {};
 
     LOG(INFO) << "master send request...";
     {
@@ -66,7 +72,7 @@ void TestRpc(RpcServer& server) {
       msg.add_greet(greet);
       msg.add_v(1);
       builder.Finish(msg.Finish());
-      server.SendRequest(1, service, builder.GetBufferPointer(), builder.GetSize(), callback);
+      server.SendRequest(0, service, builder.GetBufferPointer(), builder.GetSize(), callback);
     }
     {
       FlatBufferBuilder builder;
@@ -75,7 +81,7 @@ void TestRpc(RpcServer& server) {
       msg.add_greet(greet);
       msg.add_v(2);
       builder.Finish(msg.Finish());
-      server.SendRequest(2, service, builder.GetBufferPointer(), builder.GetSize(), callback);
+      server.SendRequest(0, service, builder.GetBufferPointer(), builder.GetSize(), callback);
     }
   }
 
