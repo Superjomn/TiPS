@@ -71,6 +71,9 @@ class PullAccessAgent {
   using pull_param_t    = typename AccessMethod::param_t;
 
   explicit PullAccessAgent() {}
+  PullAccessAgent(table_t *table, access_method_t &&access_method)
+      : table_(table), access_method_(std::move(access_method)) {}
+
   void Init(table_t &table, access_method_t &&access_method) {
     table_         = &table;
     access_method_ = std::move(access_method);
@@ -122,7 +125,7 @@ class PushAccessAgent {
   using access_method_t = AccessMethod;
 
   explicit PushAccessAgent() {}
-  void Init(table_t &table) { table_ = &table; }
+  PushAccessAgent(table_t *table, access_method_t &&access) : table_(table), access_method_(std::move(access)) {}
 
   explicit PushAccessAgent(table_t &table, access_method_t &&access_method)
       : table_(&table), access_method_(std::move(access_method)) {}

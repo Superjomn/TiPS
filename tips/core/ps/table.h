@@ -78,6 +78,7 @@ class Table {
   std::vector<ShardInfo> local_shards_;
   std::vector<ShardInfo> shards_;
 
+  // We allocate each shard a thread.
   ThreadGroup server_thread_group_;
   ThreadGroup local_thread_group_;
 
