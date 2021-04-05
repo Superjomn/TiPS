@@ -41,27 +41,20 @@ void RpcServer::StartRunLoop() {
       continue;
     }
 
-    std::vector<char> buffer;
-    buffer.resize(msg.length());
-
-    std::memcpy(buffer.data(), msg.buffer(), msg.length());
-    msg.Release();
-
     // Parse the message content.
-    RpcMsgHead *head = reinterpret_cast<RpcMsgHead *>(buffer.data());
+    const RpcMsgHead *head = GetMsgHead(msg);
+    const void *data       = GetMsgContent(msg);
 
-    uint8_t *data = reinterpret_cast<uint8_t *>(buffer.data() + sizeof(RpcMsgHead));
-    if (buffer.size() == sizeof(RpcMsgHead)) data = nullptr;  // empty message content
     switch (head->message_type) {
       case RpcMsgType::REQUEST: {
         CHECK_EQ(head->server_id, mpi_rank());
-        head->service->callback()(*head, data);
+        head->service->callback()(std::move(msg));
       } break;
 
       case RpcMsgType::RESPONSE: {
         CHECK_EQ(head->client_id, mpi_rank());
         VLOG(3) << "call response callback...";
-        head->request->callback()(*head, data);
+        head->request->callback()(std::move(msg));
         VLOG(3) << "done call response callback...";
         CHECK(head->request);
         delete head->request;

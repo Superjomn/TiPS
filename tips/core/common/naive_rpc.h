@@ -47,7 +47,7 @@ struct RpcMsgHead {
   RpcMsgType message_type;
 };
 
-using RpcCallback = std::function<void(const RpcMsgHead&, uint8_t* /*address of the flatbuffers data*/)>;
+using RpcCallback = std::function<void(ZmqMessage&&)>;
 
 /**
  * RpcService represents a service in the RPC framework. The callback will be invoked when a Request arrive.

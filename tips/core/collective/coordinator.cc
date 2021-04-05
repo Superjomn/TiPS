@@ -391,8 +391,8 @@ void BackgroundThreadLoop() {
       if (!IsCoordinator()) {  // send message to coordinator
         MPI_LOG << " send a request to coordinator";
         // callback: When the response arrived from coordinator, a Allreduce will be performed at worker.
-        RpcCallback callback = [&](RpcMsgHead head, uint8_t* buf) {
-          auto msg                  = flatbuffers::GetRoot<message::ResponseMessage>(buf);
+        RpcCallback callback = [&](ZmqMessage&& zmq_msg) {
+          auto msg                  = flatbuffers::GetRoot<message::ResponseMessage>(GetMsgContent(zmq_msg));
           auto response_type        = msg->response_type();
           auto tensor_name          = msg->tensor_name()->str();
           std::string error_message = msg->error_message() ? msg->error_message()->str() : "";
@@ -518,8 +518,9 @@ void CollectiveState::Initialize() {
   // the collective_coordinator service received the RequestMessage from workers and push the message to message_queue
   // directlly. We don't process the message in this RPC service to avoid affecting the global RPC performance, for it
   // is shared by all the tasks.
-  RpcServer::Global().AddService(kCoordinatorRpcServiceName, [](RpcMsgHead head, uint8_t* buf) {
-    auto msg = flatbuffers::GetRoot<message::RequestMessage>(buf);
+  RpcServer::Global().AddService(kCoordinatorRpcServiceName, [](ZmqMessage&& zmq_msg) {
+    auto msg               = flatbuffers::GetRoot<message::RequestMessage>(GetMsgContent(zmq_msg));
+    const RpcMsgHead* head = GetMsgHead(zmq_msg);
     // Copy the message.
     RequestMessage message = ::tips::collective::CreateRequestMessage(
         msg->request_rank(),
@@ -527,14 +528,16 @@ void CollectiveState::Initialize() {
         msg->tensor_type(),
         msg->tensor_name()->str(),
         std::vector<int64_t>(msg->tensor_shape()->begin(), msg->tensor_shape()->end()));
-    CollectiveState::Global().message_queue->WriteMove(std::make_pair(std::move(head), std::move(message)));
+
+    CollectiveState::Global().message_queue->WriteMove(std::make_pair(std::move(*head), std::move(message)));
   });
 
-  RpcServer::Global().AddService(kShutdownRpcServiceName, [](RpcMsgHead head, uint8_t* buf) {
+  RpcServer::Global().AddService(kShutdownRpcServiceName, [](ZmqMessage&& msg) {
+    const RpcMsgHead* head              = GetMsgHead(msg);
     CollectiveState::Global().shut_down = true;
     mpi_barrier();
     MPI_LOG << " set global shutdown state";
-    RpcServer::Global().SendResponse(head, nullptr, 0);
+    RpcServer::Global().SendResponse(*head, nullptr, 0);
   });
 
   background_thread = std::thread([] { BackgroundThreadLoop(); });
@@ -578,10 +581,9 @@ void ShutdownBackgroundService() {
   if (mpi_rank() == 0) {
     for (int serverid = 0; serverid < mpi_size(); serverid++) {
       MPI_LOG << " send shutdown request to " << serverid;
-      RpcServer::Global().SendRequest(
-          serverid, shutdown_service, nullptr, 0, [serverid](RpcMsgHead head, uint8_t* buf) {
-            MPI_LOG << " done send shutdown request to " << serverid;
-          });
+      RpcServer::Global().SendRequest(serverid, shutdown_service, nullptr, 0, [serverid](ZmqMessage&& zmq_msg) {
+        MPI_LOG << " done send shutdown request to " << serverid;
+      });
     }
   }
 }
