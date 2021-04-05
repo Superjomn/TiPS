@@ -19,9 +19,4 @@ TEST(ZmqMessage, Move) {
   ASSERT_EQ(message.length(), 0);
 }
 
-void fn(std::shared_ptr<ZmqMessage> msg) {
-  int v = *static_cast<int*>(msg->buffer());
-  ASSERT_EQ(v, 123);
-}
-
 }  // namespace tips
