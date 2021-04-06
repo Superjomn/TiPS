@@ -14,4 +14,6 @@ core_gather_srcs(SRCS
 cc_test(test_dense_table SRCS dense_table_test.cc DEPS tipscore)
 cc_test(test_access_method SRCS access_method_test.cc DEPS tipscore)
 cc_test(test_sparse_table SRCS sparse_table_test.cc DEPS tipscore)
+
 cc_binary(test_ps_server SRCS ps_server_test.cc DEPS tipscore)
+mpi_test(test_ps_server 1)
