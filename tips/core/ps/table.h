@@ -45,6 +45,7 @@ class Table {
   void Finalize();
 
   bool Initialized() const { return !shards_.empty(); }
+  bool Finalized() const { return finalized_; }
 
   /**
    * Get the shard information for \param i -th global shard.
@@ -62,7 +63,10 @@ class Table {
     return local_shards_[i];
   }
 
-  Channel<std::function<void()>>& server_channel(int i) { return *server_channels_[i]; }
+  Channel<std::function<void()>>& server_channel(int i) {
+    CHECK_LT(i, server_channels_.size());
+    return *server_channels_[i];
+  }
 
   Channel<std::function<void()>>& client_channel() { return *client_channel_; }
 
@@ -84,6 +88,8 @@ class Table {
 
   std::vector<std::shared_ptr<Channel<std::function<void()>>>> server_channels_;
   std::shared_ptr<Channel<std::function<void()>>> client_channel_;
+
+  bool finalized_{false};
 };
 
 }  // namespace ps

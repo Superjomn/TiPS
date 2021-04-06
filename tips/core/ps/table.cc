@@ -59,6 +59,8 @@ void Table::Initialize() {
 }
 
 void Table::Finalize() {
+  finalized_ = true;
+
   mpi_barrier();
   CHECK(Initialized());
 

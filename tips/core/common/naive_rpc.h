@@ -110,6 +110,7 @@ class RpcServer {
    * @return address of the service instance.
    */
   RpcService* AddService(const std::string& type, RpcCallback callback);
+  RpcService* TryAddService(const std::string& type, RpcCallback callback);
 
   RpcService* LookupService(const std::string& type) const;
 

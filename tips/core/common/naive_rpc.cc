@@ -16,6 +16,12 @@ RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback)
   return new_service;
 }
 
+RpcService *RpcServer::TryAddService(const std::string &type, RpcCallback callback) {
+  auto *service = LookupService(type);
+  if (service) return service;
+  return AddService(type, std::move(callback));
+}
+
 void RpcServer::StartRunLoop() {
   while (true) {
     ZmqMessage msg;
