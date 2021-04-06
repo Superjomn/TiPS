@@ -1,6 +1,8 @@
 #pragma once
 
 #include <absl/container/flat_hash_map.h>
+#include <absl/container/inlined_vector.h>
+
 #include "tips/core/common/channel.h"
 #include "tips/core/common/common.h"
 #include "tips/core/common/flatbuffers_utils.h"
@@ -61,12 +63,7 @@ class PsServer {
    */
   void PullTask(ZmqMessage&& zmq_msg);
 
-  void PushTask(const ZmqMessage& zmq_message) {
-    auto* msg_head = GetMsgHead(zmq_message);
-    auto* buffer   = GetMsgContent(zmq_message);
-    CHECK(buffer);
-    auto push_request = flatbuffers::GetRoot<message::PushRequest>(buffer);
-  }
+  void PushTask(ZmqMessage&& zmq_msg);
 
   std::shared_ptr<message_channel_t> pull_channel_;
   std::shared_ptr<message_channel_t> push_channel_;
@@ -203,6 +200,65 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::PullTask(ZmqMessag
       }
 
       snapshot->TryDone(queries.size());
+    });
+  }
+}
+
+namespace {
+
+template <typename key_t>
+struct PushTaskSnapshot {
+  ZmqMessage zmq_msg;
+
+  absl::flat_hash_map<key_t, std::vector<message::KeyItem*>> slots;
+
+  const RpcMsgHead* msg_head() const { return GetMsgHead(zmq_msg); }
+  const void* msg_buffer() const { return GetMsgContent(zmq_msg); }
+
+  void TryDone(int finished) {}
+
+  PushTaskSnapshot(ZmqMessage&& zmq_msg, int key_count) : zmq_msg(std::move(zmq_msg)), finished_counter_(key_count) {}
+
+ private:
+  std::atomic<int> finished_counter_;
+};
+
+}  // namespace
+
+template <typename TABLE, typename PULL_ACCESS_METHOD, typename PUSH_ACCESS_METHOD>
+void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::PushTask(ZmqMessage&& zmq_msg) {
+  auto* msg_head = GetMsgHead(zmq_msg);
+  auto* buffer   = GetMsgContent(zmq_msg);
+  CHECK(buffer);
+  auto push_request = flatbuffers::GetRoot<message::PushRequest>(buffer);
+  // NOTE Though the zmq_msg is moved latter, the memory address in message content is still valid.
+
+  auto snapshot = std::make_shared<PushTaskSnapshot<key_t>>(std::move(zmq_msg), push_request->data()->size());
+
+  for (auto* item : *push_request->data()) {
+    key_t key                 = item->key();
+    int shard_id              = push_agent_->ToShardId(key);
+    snapshot->slots[shard_id] = item;
+  }
+
+  for (auto& item : snapshot->slots) {
+    int slot_id                                = item.first;
+    const std::vector<message::KeyItem*>& rcds = item.second;
+
+    auto& channel = table_->server_channel(slot_id);
+
+    channel.WriteMove([this, snapshot, rcds] {
+      for (auto& rcd : rcds) {
+        auto* data = rcd->value();
+
+        switch (rcd->dtype()) {
+          case message::DataType_TF_FLOAT32:
+            break;
+
+          default:
+            LOG(FATAL) << "Not supported type: " << rcd->dtype();
+        }
+      }
     });
   }
 }

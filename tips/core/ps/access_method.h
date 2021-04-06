@@ -141,6 +141,8 @@ class PushAccessAgent {
     access_method_.ApplyPushValue(key, *param, push_val);
   }
 
+  int ToShardId(const key_t &key) { return table_->ToShardId(key); }
+
  private:
   table_t *table_{};
   AccessMethod access_method_;

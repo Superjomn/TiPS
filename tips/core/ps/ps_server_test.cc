@@ -1,5 +1,6 @@
 #include "tips/core/ps/ps_server.h"
 #include <vector>
+#include "tips/core/common/vec.h"
 #include "tips/core/mpi/tips_mpi.h"
 #include "tips/core/operations.h"
 #include "tips/core/ps/sparse_access_method.h"
@@ -90,7 +91,8 @@ void TestBasic() {
     std::vector<std::pair<key_t, float>> datas(pull_response->data()->size() / sizeof(float));
     for (const auto& item : *pull_response->data()) {
       LOG(INFO) << "responsed key: " << item->key();
-      LOG(INFO) << "responsed value: " << *reinterpret_cast<const float*>(item->value()->data());
+      float val = *reinterpret_cast<const float*>(item->value()->data());
+      CHECK_NEAR(val, 0, 1e-5);
     }
 
     cv.notify_one();
