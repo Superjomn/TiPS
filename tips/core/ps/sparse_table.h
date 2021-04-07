@@ -62,7 +62,7 @@ struct alignas(64) SparseTableShard {
 
   void Assign(const key_t &key, const value_t &val) {
     RwLockWriteGuard lock(rwlock_);
-    data()[key] = val.Copy();
+    data()[key].CopyFrom(val);
   }
 
   size_t size() const {

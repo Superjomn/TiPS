@@ -21,6 +21,7 @@ using PushResponse = FBS_TypeBufferOwned<message::PushResponse>;
 using PullResponse = FBS_TypeBufferOwned<message::PullResponse>;
 
 Datatype ToDatatype(message::DataType dtype);
+message::DataType ToMessageDataType(Datatype dtype);
 
 template <typename TABLE, typename PULL_ACCESS_METHOD, typename PUSH_ACCESS_METHOD>
 class PsServer {
@@ -89,11 +90,7 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::AddRpcService() {
   };
 
   // Get a PullRequest message, and response the PullResponse.
-  RpcCallback push_callback = [this](ZmqMessage&& zmq_msg) {
-    CHECK(push_channel_);
-    // Just push the message to the channel, limit the workload of RPC threads.
-    push_channel_->WriteMove(std::move(zmq_msg));
-  };
+  RpcCallback push_callback = [this](ZmqMessage&& zmq_msg) { PushTask(std::move(zmq_msg)); };
 
   RpcServer::Global().TryAddService(rpc::kPullService, pull_callback);
   RpcServer::Global().TryAddService(rpc::kPushService, push_callback);
@@ -131,6 +128,7 @@ struct PullTaskSnapshot {
   void TryDone(int finished) {
     finished_counter_ -= finished;
 
+    std::lock_guard<std::mutex> lock(mu);
     if (finished_counter_ == 0) {
       auto* buffer = GetMsgContent(zmq_msg);
       CHECK(buffer);
@@ -215,12 +213,29 @@ template <typename key_t>
 struct PushTaskSnapshot {
   ZmqMessage zmq_msg;
 
-  absl::flat_hash_map<key_t, std::vector<message::KeyItem*>> slots;
+  std::mutex mu;
+
+  absl::flat_hash_map<key_t, std::vector<const message::KeyItem*>> slots;
 
   const RpcMsgHead* msg_head() const { return GetMsgHead(zmq_msg); }
   const void* msg_buffer() const { return GetMsgContent(zmq_msg); }
 
-  void TryDone(int finished) {}
+  void TryDone(int finished) {
+    finished_counter_ -= finished;
+    auto push_msg = flatbuffers::GetRoot<message::PushResponse>(msg_buffer());
+
+    // Lock to avoid multiple thread enter the if-body.
+    std::lock_guard<std::mutex> lock(mu);
+    if (finished_counter_ == 0) {
+      // Construct the response message and send back.
+      flatbuffers::FlatBufferBuilder builder;
+      auto meta = message::CreateMessageMeta(builder, push_msg->meta()->client_id(), push_msg->meta()->message_id());
+      auto msg  = message::CreatePushResponse(builder, meta);
+      builder.Finish(msg);
+
+      RpcServer::Global().SendResponse(*msg_head(), builder.GetBufferPointer(), builder.GetSize());
+    }
+  }
 
   PushTaskSnapshot(ZmqMessage&& zmq_msg, int key_count) : zmq_msg(std::move(zmq_msg)), finished_counter_(key_count) {}
 
@@ -241,29 +256,26 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::PushTask(ZmqMessag
   auto snapshot = std::make_shared<PushTaskSnapshot<key_t>>(std::move(zmq_msg), push_request->data()->size());
 
   for (auto* item : *push_request->data()) {
-    key_t key                 = item->key();
-    int shard_id              = push_agent_->ToShardId(key);
-    snapshot->slots[shard_id] = item;
+    key_t key    = item->key();
+    int shard_id = push_agent_.ToShardId(key);
+    snapshot->slots[shard_id].push_back(item);
   }
 
   for (auto& item : snapshot->slots) {
-    int slot_id                                = item.first;
-    const std::vector<message::KeyItem*>& rcds = item.second;
+    int slot_id                                      = item.first;
+    const std::vector<const message::KeyItem*>& rcds = item.second;
 
     auto& channel = table_->server_channel(slot_id);
 
     channel.WriteMove([this, snapshot, rcds] {
       for (auto& rcd : rcds) {
-        auto* data = rcd->value();
-
-        switch (rcd->dtype()) {
-          case message::DataType_TF_FLOAT32:
-            break;
-
-          default:
-            LOG(FATAL) << "Not supported type: " << rcd->dtype();
-        }
+        auto dtype       = ToDatatype(rcd->dtype());
+        int num_elements = rcd->value()->size() / DatatypeNumBytes(dtype);
+        value_t tmp(ToDatatype(rcd->dtype()), num_elements, const_cast<uint8_t*>(rcd->value()->data()));
+        push_agent_.ApplyPushValue(rcd->key(), tmp);
       }
+
+      snapshot->TryDone(rcds.size());
     });
   }
 }

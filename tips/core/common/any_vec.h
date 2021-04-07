@@ -13,18 +13,25 @@ class AnyVec {
  public:
   using byte_t = uint8_t;
   AnyVec()     = default;
+
+  //! Construct, own the memory.
   AnyVec(Datatype dtype, int num_elements)
       : dtype_(dtype),
         data_(new uint8_t[num_elements * DatatypeNumBytes(dtype)]),
         num_elements_(num_elements),
         own_data_(true) {}
 
+  //! Construct, move the resource if owned by the other.
   AnyVec(AnyVec&& other)
       : dtype_(other.dtype_), num_elements_(other.num_elements_), own_data_(other.own_data_), data_(other.data_) {
     other.own_data_     = false;
     other.num_elements_ = 0;
     other.data_         = nullptr;
   }
+
+  //! Construct from a buffer, without own the buffer.
+  AnyVec(Datatype dtype, int num_elements, void* buf)
+      : dtype_(dtype), num_elements_(num_elements), data_(static_cast<byte_t*>(buf)), own_data_{false} {}
 
   AnyVec(const AnyVec&) = delete;
 
@@ -34,6 +41,7 @@ class AnyVec {
     }
   }
 
+  //! Copy the data, without allocating memory.
   AnyVec ShadowCopy() const {
     AnyVec res;
     res.data_         = data_;
@@ -43,6 +51,7 @@ class AnyVec {
     return res;
   }
 
+  //! Copy the data, allocate memory.
   AnyVec Copy() const {
     AnyVec res(dtype_, num_elements_);  // Allocate memory
     memcpy(res.data_, data_, num_bytes());

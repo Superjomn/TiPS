@@ -13,9 +13,10 @@ void tips_init() {
   MpiContext::Global();
   LOG(INFO) << "Initialize RPC ...";
   RpcServer::Global().Initialize();
-  LOG(WARNING) << "Initialize TiPS done";
-
+  LOG(INFO) << "Initialize CollectiveState";
   collective::CollectiveState::Global().Initialize();
+
+  LOG(WARNING) << "Initialize TiPS done";
 }
 
 void tips_shutdown() {

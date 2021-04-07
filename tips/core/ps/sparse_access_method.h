@@ -56,6 +56,7 @@ class SparseTableSgdPushAccess : public PushAccessMethod<KEY, PARAM, GRAD> {
     param_t temp(param.dtype(), param.size());
     param_t::Mul(grad.ShadowCopy(), lr_, temp.ShadowCopy());
     param = std::move(temp);
+    LOG(INFO) << "Updated " << key << " " << param;
   }
 
  private:

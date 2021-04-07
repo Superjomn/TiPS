@@ -27,36 +27,28 @@ flatbuffers::DetachedBuffer CreatePullRequest(const std::vector<uint64_t>& keys)
   return builder.Release();
 }
 
+flatbuffers::DetachedBuffer CreatePushRequest(const std::vector<uint64_t>& keys, const std::vector<AnyVec>& vecs) {
+  flatbuffers::FlatBufferBuilder builder;
+
+  std::vector<flatbuffers::Offset<message::KeyItem>> datas;
+  for (int i = 0; i < keys.size(); i++) {
+    auto key  = keys[i];
+    auto& vec = vecs[i];
+
+    auto v   = builder.CreateVector(reinterpret_cast<const uint8_t*>(vec.buffer()), vec.num_bytes());
+    auto rcd = message::CreateKeyItem(builder, key, ToMessageDataType(vec.dtype()), v);
+    datas.push_back(rcd);
+  }
+
+  auto meta   = message::CreateMessageMeta(builder, mpi_rank(), 0);
+  auto _datas = builder.CreateVector(datas);
+  auto msg    = message::CreatePushRequest(builder, meta, _datas);
+  builder.Finish(msg);
+
+  return builder.Release();
+}
+
 void TestBasic() {
-  struct Value {
-    float x;
-
-    void* data() { return &x; }
-    size_t num_bytes() const { return sizeof(float); }
-
-    Value operator*(float lr) const {
-      Value res;
-      res.x *= lr;
-      return res;
-    }
-
-    Value operator+(const Value& other) const {
-      Value res;
-      res.x += other.x;
-      return res;
-    }
-
-    Value& operator+=(const Value& other) {
-      x += other.x;
-      return *this;
-    }
-
-    std::ostream& operator<<(std::ostream& os) const {
-      os << x;
-      return os;
-    }
-  };
-
   using val_t         = AnyVec;
   using key_t         = uint64_t;
   using param_t       = AnyVec;
@@ -74,12 +66,13 @@ void TestBasic() {
 
   auto pull_request = CreatePullRequest({1, 2, 3});
 
-  auto* service = RpcServer::Global().LookupService(rpc::kPullService);
+  auto* pull_service = RpcServer::Global().LookupService(rpc::kPullService);
+  auto* push_service = RpcServer::Global().LookupService(rpc::kPushService);
 
   std::condition_variable cv;
   std::mutex mu;
 
-  RpcServer::Global().SendRequest(0, service, pull_request.data(), pull_request.size(), [&](ZmqMessage&& zmq_msg) {
+  RpcServer::Global().SendRequest(0, pull_service, pull_request.data(), pull_request.size(), [&](ZmqMessage&& zmq_msg) {
     LOG(INFO) << "Get Pull response";
 
     auto* head   = GetMsgHead(zmq_msg);
@@ -102,8 +95,26 @@ void TestBasic() {
     cv.notify_one();
   });
 
-  std::unique_lock<std::mutex> lock(mu);
-  cv.wait(lock);
+  {
+    std::unique_lock<std::mutex> lock(mu);
+    cv.wait(lock);
+  }
+
+  std::vector<AnyVec> vecs;
+  vecs.emplace_back(DatatypeTypetrait<float>(), 10);
+  vecs.emplace_back(DatatypeTypetrait<float>(), 10);
+  for (int i = 0; i < 10; i++) vecs[0].mutable_data<float>()[i] = 1.f;
+  for (int i = 0; i < 10; i++) vecs[1].mutable_data<float>()[i] = 2.f;
+
+  auto push_message = CreatePushRequest({1, 2}, vecs);
+  RpcServer::Global().SendRequest(0, push_service, push_message.data(), push_message.size(), [&](ZmqMessage&&) {
+    LOG(INFO) << "get push response";
+    cv.notify_one();
+  });
+  {
+    std::unique_lock<std::mutex> lock(mu);
+    cv.wait(lock);
+  }
 
   server.Finalize();
 
