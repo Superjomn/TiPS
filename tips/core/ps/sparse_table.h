@@ -56,13 +56,13 @@ struct alignas(64) SparseTableShard {
     RwLockReadGuard lock(rwlock_);
     auto it = data().find(key);
     if (it == data().end()) return false;
-    val = it->second;
+    val.ShadowCopyFrom(it->second);
     return true;
   }
 
   void Assign(const key_t &key, const value_t &val) {
     RwLockWriteGuard lock(rwlock_);
-    data()[key] = val;
+    data()[key] = val.Copy();
   }
 
   size_t size() const {

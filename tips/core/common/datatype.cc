@@ -5,9 +5,9 @@ namespace tips {
 
 const char* DatatypeToStr(Datatype dtype) {
   switch (dtype) {
-#define ___(x)        \
-  case (Datatype::x): \
-    return #x;
+#define ___(repr, type)  \
+  case (Datatype::repr): \
+    return #repr;
 
     TIPS_DATATYPE_FOREACH(___)
 
@@ -33,6 +33,36 @@ int DatatypeNumBytes(Datatype dtype) {
   }
 
   return -1;
+}
+
+template <>
+Datatype DatatypeTypetrait<int32_t>() {
+  return Datatype::kInt32;
+}
+template <>
+Datatype DatatypeTypetrait<int64_t>() {
+  return Datatype::kInt64;
+}
+template <>
+Datatype DatatypeTypetrait<float>() {
+  return Datatype::kFp32;
+}
+template <>
+Datatype DatatypeTypetrait<double>() {
+  return Datatype::kFp64;
+}
+template <>
+Datatype DatatypeTypetrait<int8_t>() {
+  return Datatype::kInt8;
+}
+template <>
+Datatype DatatypeTypetrait<uint8_t>() {
+  return Datatype::kUInt8;
+}
+
+std::ostream& operator<<(std::ostream& os, Datatype dtype) {
+  os << DatatypeToStr(dtype);
+  return os;
 }
 
 }  // namespace tips

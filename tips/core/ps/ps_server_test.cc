@@ -1,5 +1,6 @@
 #include "tips/core/ps/ps_server.h"
 #include <vector>
+#include "tips/core/common/any_vec.h"
 #include "tips/core/common/vec.h"
 #include "tips/core/mpi/tips_mpi.h"
 #include "tips/core/operations.h"
@@ -18,7 +19,7 @@ flatbuffers::DetachedBuffer CreatePullRequest(const std::vector<uint64_t>& keys)
   auto meta    = message::CreateMessageMeta(builder, mpi_rank(), 0);
   auto _keys   = builder.CreateVector(keys);
   auto dtypes  = builder.CreateVector(std::vector<int16_t>(keys.size(), message::DataType_TF_FLOAT32));
-  auto lengths = builder.CreateVector(std::vector<uint32_t>(keys.size(), 1));
+  auto lengths = builder.CreateVector(std::vector<uint32_t>(keys.size(), 10));
 
   auto pull_request = message::CreatePullRequest(builder, meta, _keys, dtypes, lengths);
   builder.Finish(pull_request);
@@ -56,9 +57,9 @@ void TestBasic() {
     }
   };
 
-  using val_t         = Value;
+  using val_t         = AnyVec;
   using key_t         = uint64_t;
-  using param_t       = Value;
+  using param_t       = AnyVec;
   using table_t       = SparseTable<key_t, val_t>;
   using pull_access_t = SparseTablePullAccess<key_t, param_t, val_t>;
   using push_access_t = SparseTableSgdPushAccess<key_t, param_t, param_t>;
@@ -91,8 +92,11 @@ void TestBasic() {
     std::vector<std::pair<key_t, float>> datas(pull_response->data()->size() / sizeof(float));
     for (const auto& item : *pull_response->data()) {
       LOG(INFO) << "responsed key: " << item->key();
-      float val = *reinterpret_cast<const float*>(item->value()->data());
-      CHECK_NEAR(val, 0, 1e-5);
+      auto* val = reinterpret_cast<const float*>(item->value()->data());
+      LOG(INFO) << "size: " << item->value()->size();
+      for (int i = 0; i < 10; i++) {
+        CHECK_NEAR(val[i], 0, 1e-5);
+      }
     }
 
     cv.notify_one();

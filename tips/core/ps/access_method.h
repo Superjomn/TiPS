@@ -22,7 +22,7 @@ class PullAccessMethod {
   /**
    * @brief assign an initial value to param
    */
-  virtual void InitParam(const key_t &key, param_t &param) = 0;
+  virtual void InitParam(const key_t &key, param_t &param, Datatype dtype, int length) = 0;
 
   /**
    * @brief assign param to val
@@ -87,10 +87,10 @@ class PullAccessAgent {
   /**
    * Server-side query parameter
    */
-  void GetPullValue(const key_t &key, pull_val_t &val) {
+  void GetPullValue(const key_t &key, pull_val_t &val, Datatype dtype = Datatype::kFp32, int length = 1) {
     pull_param_t param;
     if (!table_->Find(key, param)) {
-      access_method_.InitParam(key, param);
+      access_method_.InitParam(key, param, dtype, length);
       table_->Assign(key, param);
     }
 

@@ -6,8 +6,10 @@
 #include "tips/core/common/common.h"
 
 namespace tips {
-namespace ps {
 
+/**
+ * Vec simplifies the operation of vectors, it doesn't own the data, but just hold the address, similar to absl::Span.
+ */
 template <typename T>
 class Vec {
  public:
@@ -189,6 +191,54 @@ class Vec {
     return a;
   }
 
+  static void Mul(Vec<T> in0, Vec<T> in1, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *in1_data = in1.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), in1.size());
+    CHECK_EQ(in0.size(), out.size());
+
+    for (int i = 0; i < in0.size(); i++) {
+      out_data[i] = in0_data[i] * in1_data[i];
+    }
+  }
+
+  static void Mul(Vec<T> in0, T scale, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), out.size());
+
+    for (int i = 0; i < in0.size(); i++) {
+      out_data[i] = in0_data[i] * scale;
+    }
+  }
+
+  static void Add(Vec<T> in0, Vec<T> in1, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *in1_data = in1.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), in1.size());
+    CHECK_EQ(in0.size(), out.size());
+
+    for (int i = 0; i < in0.size(); i++) {
+      out_data[i] = in0_data[i] + in1_data[i];
+    }
+  }
+
+  static void Add(Vec<T> in0, T bias, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), out.size());
+
+    for (int i = 0; i < in0.size(); in0++) {
+      out_data[i] = in0_data[i] + bias;
+    }
+  }
+
  protected:
   void RandInit(float offset = 0.5) {
     for (size_t i = 0; i < size(); i++) data_[i] = (rand() / (float)RAND_MAX - 0.5) / size_;
@@ -208,5 +258,4 @@ Vec<T> sqrt(const Vec<T> &vec) {
   return std::move(tmp);
 }
 
-}  // namespace ps
 }  // namespace tips

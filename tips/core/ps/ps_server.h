@@ -20,6 +20,8 @@ using PullRequest  = FBS_TypeBufferOwned<message::PullRequest>;
 using PushResponse = FBS_TypeBufferOwned<message::PushResponse>;
 using PullResponse = FBS_TypeBufferOwned<message::PullResponse>;
 
+Datatype ToDatatype(message::DataType dtype);
+
 template <typename TABLE, typename PULL_ACCESS_METHOD, typename PUSH_ACCESS_METHOD>
 class PsServer {
  public:
@@ -113,7 +115,8 @@ struct PullTaskSnapshot {
 
   // shardid : the id of the local shard in the sparse table.
   // offset: the offset of this key in the original request order.
-  absl::flat_hash_map<int /*shardid*/, std::vector<std::pair<int /*offset*/, key_t>>> key_slots;
+  absl::flat_hash_map<int /*shardid*/, std::vector<std::tuple<int /*offset*/, key_t, Datatype, int /*length*/>>>
+      key_slots;
 
   std::vector<flatbuffers::Offset<message::KeyItem>> datas;
 
@@ -173,8 +176,10 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::PullTask(ZmqMessag
   int i = 0;
 
   for (key_t key : *pull_request->keys()) {
-    int shard_id = pull_agent_.ToShardId(key);
-    snapshot->key_slots[shard_id].emplace_back(std::make_pair(i++, key));
+    int shard_id   = pull_agent_.ToShardId(key);
+    Datatype dtype = ToDatatype(static_cast<message::DataType>(*pull_request->dtypes()[i].data()));
+    int length     = *pull_request->lengths()[i].data();
+    snapshot->key_slots[shard_id].emplace_back(std::make_tuple(i++, key, dtype, length));
   }
 
   for (auto& item : snapshot->key_slots) {
@@ -184,13 +189,13 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::PullTask(ZmqMessag
 
     channel.WriteMove([this, snapshot, queries] {
       value_t value;
-      for (auto [offset, key] : queries) {
-        pull_agent_.GetPullValue(key, value);
+      for (auto [offset, key, dtype, length] : queries) {
+        pull_agent_.GetPullValue(key, value, dtype, length);
 
         {  // protect the resp_builder for it is shared by all the shard threads.
           std::lock_guard<std::mutex> lock(snapshot->mu);
-          uint8_t* data_addr = reinterpret_cast<uint8_t*>(value.data());
-          auto flat_data     = snapshot->resp_builder.CreateVector(data_addr, value.num_bytes());
+          auto* data_addr = reinterpret_cast<uint8_t*>(value.template buffer());
+          auto flat_data  = snapshot->resp_builder.CreateVector(data_addr, value.num_bytes());
 
           message::KeyItemBuilder key_builder(snapshot->resp_builder);
           key_builder.add_value(flat_data);
