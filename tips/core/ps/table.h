@@ -4,6 +4,7 @@
 #include "tips/core/common/channel.h"
 #include "tips/core/common/common.h"
 #include "tips/core/common/thread_group.h"
+#include "tips/core/mpi/mpi_group.h"
 #include "tips/core/mpi/tips_mpi.h"
 
 #define TABLE_SHARD_NUM 8
@@ -21,7 +22,7 @@ class Table {
     int local_shard_id{-1};
   };
 
-  explicit Table() {
+  explicit Table(const MpiGroup& group) : server_group_(group) {
     // TODO(Superjomn) make it a config.
     local_shard_num_ = TABLE_SHARD_NUM;
   }
@@ -31,7 +32,7 @@ class Table {
   //! Get number of overall shards across the whole world for this application.
   int shard_num() const {
     // TODO(Superjomn) Replace mpi_size() to server node number.
-    return mpi_size() * local_shard_num();
+    return server_group_.mpi_size() * local_shard_num();
   }
 
   /**
@@ -88,6 +89,8 @@ class Table {
 
   std::vector<std::shared_ptr<Channel<std::function<void()>>>> server_channels_;
   std::shared_ptr<Channel<std::function<void()>>> client_channel_;
+
+  const MpiGroup& server_group_;
 
   bool finalized_{false};
 };

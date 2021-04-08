@@ -1,9 +1,13 @@
 #include "tips/core/ps/ps_server.h"
+
 #include <vector>
+
+#include "ps_utils.h"
 #include "tips/core/common/any_vec.h"
 #include "tips/core/common/vec.h"
 #include "tips/core/mpi/tips_mpi.h"
 #include "tips/core/operations.h"
+#include "tips/core/ps/route.h"
 #include "tips/core/ps/sparse_access_method.h"
 #include "tips/core/ps/sparse_table.h"
 #include "tips/core/rpc_service_names.h"
@@ -57,7 +61,10 @@ void TestBasic() {
   using push_access_t = SparseTableSgdPushAccess<key_t, param_t, param_t>;
   using server_t      = PsServer<table_t, pull_access_t, push_access_t>;
 
-  table_t table;
+  Route::Global().RegisterNode<Route::NodeKind::PS_SERVER>(0);
+  Route::Global().Initialize();
+
+  table_t table(Route::Global().GetGroup<Route::NodeKind::PS_SERVER>());
   pull_access_t pull_access(&table);
   push_access_t push_access(&table, 1);
 
@@ -117,6 +124,8 @@ void TestBasic() {
   }
 
   server.Finalize();
+
+  Route::Global().Finalize();
 
   LOG(INFO) << "end test";
 }

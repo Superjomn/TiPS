@@ -1,7 +1,7 @@
 core_gather_srcs(SRCS
         table.cc
-        client.cc
         ps_server.cc
+        ps_client.cc
         dense_table.cc
         sparse_table.cc
         access_method.cc
@@ -9,6 +9,7 @@ core_gather_srcs(SRCS
         dense_access_method.cc
         param.cc
         sparse_access_method.cc
+        ps_utils.cc
         )
 
 cc_test(test_dense_table SRCS dense_table_test.cc DEPS tipscore)
@@ -17,3 +18,6 @@ cc_test(test_sparse_table SRCS sparse_table_test.cc DEPS tipscore)
 
 cc_binary(test_ps_server SRCS ps_server_test.cc DEPS tipscore)
 mpi_test(test_ps_server 1)
+
+cc_binary(test_ps_client SRCS ps_client_test.cc DEPS tipscore)
+mpi_test(test_ps_client 1)

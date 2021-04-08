@@ -1,3 +1,4 @@
+#pragma once
 #include <flatbuffers/flatbuffers.h>
 
 #include "tips/core/common/common.h"

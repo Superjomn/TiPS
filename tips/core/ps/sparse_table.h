@@ -115,7 +115,7 @@ class SparseTable : public Table {
   using param_t = value_t;
   typedef SparseTableShard<key_t, value_t> shard_t;
 
-  SparseTable() { local_shards_.resize(local_shard_num()); }
+  SparseTable(const MpiGroup &server_group) : Table(server_group) { local_shards_.resize(local_shard_num()); }
 
   shard_t &local_shard(int shard_id) {
     CHECK_LT(shard_id, local_shard_num());

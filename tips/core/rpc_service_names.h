@@ -5,8 +5,8 @@
 namespace tips {
 namespace rpc {
 
-const char* kPullService = "pull_service";
-const char* kPushService = "push_service";
+static const char* kPullService = "pull_service";
+static const char* kPushService = "push_service";
 
 }  // namespace rpc
 }  // namespace tips

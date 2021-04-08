@@ -9,6 +9,7 @@
 #include "tips/core/common/naive_rpc.h"
 #include "tips/core/message/ps_messages_generated.h"
 #include "tips/core/ps/access_method.h"
+#include "tips/core/ps/ps_utils.h"
 #include "tips/core/ps/table.h"
 #include "tips/core/rpc_service_names.h"
 
@@ -19,9 +20,6 @@ using PushRequest  = FBS_TypeBufferOwned<message::PushRequest>;
 using PullRequest  = FBS_TypeBufferOwned<message::PullRequest>;
 using PushResponse = FBS_TypeBufferOwned<message::PushResponse>;
 using PullResponse = FBS_TypeBufferOwned<message::PullResponse>;
-
-Datatype ToDatatype(message::DataType dtype);
-message::DataType ToMessageDataType(Datatype dtype);
 
 template <typename TABLE, typename PULL_ACCESS_METHOD, typename PUSH_ACCESS_METHOD>
 class PsServer {

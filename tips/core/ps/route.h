@@ -36,6 +36,12 @@ class Route {
   }
 
   template <NodeKind kind>
+  const MpiGroup& GetGroup() const {
+    CheckKindValid<kind>();
+    return groups_[static_cast<short>(kind)];
+  }
+
+  template <NodeKind kind>
   size_t GetGroupSize() const {
     return GetGroupIds<kind>().size();
   }
@@ -53,11 +59,13 @@ class Route {
     CHECK(!initialized_) << "Duplicated Route initialization found";
     mpi_barrier();
 
-#define ___(item__)                                                                           \
-  {                                                                                           \
-    auto& group_ids = GetGroupIds<NodeKind::item__>();                                        \
-    groups_[static_cast<int>(NodeKind::item__)].AddRanks(group_ids.begin(), group_ids.end()); \
-    groups_[static_cast<int>(NodeKind::item__)].Initialize();                                 \
+#define ___(item__)                                                                             \
+  {                                                                                             \
+    auto& group_ids = GetGroupIds<NodeKind::item__>();                                          \
+    if (!group_ids.empty()) {                                                                   \
+      groups_[static_cast<int>(NodeKind::item__)].AddRanks(group_ids.begin(), group_ids.end()); \
+      groups_[static_cast<int>(NodeKind::item__)].Initialize();                                 \
+    }                                                                                           \
   }
 
     ROUTE_NODE_KIND_FOREACH(___)
@@ -67,7 +75,32 @@ class Route {
     initialized_ = true;
   }
 
+  void Finalize() {
+    CHECK(initialized_) << "Duplicated Route initialization found";
+    CHECK(!finalized_) << "Duplicated Route finalization found";
+    mpi_barrier();
+
+#define ___(item__)                                           \
+  {                                                           \
+    auto& group_ids = GetGroupIds<NodeKind::item__>();        \
+    if (!group_ids.empty()) {                                 \
+      groups_[static_cast<int>(NodeKind::item__)].Finalize(); \
+    }                                                         \
+  }
+
+    ROUTE_NODE_KIND_FOREACH(___)
+
+#undef ___
+
+    finalized_ = true;
+  }
+
   static size_t NumGroups() { return static_cast<int>(NodeKind::__NUM__); }
+
+  static Route& Global() {
+    static Route x;
+    return x;
+  }
 
  private:
   template <NodeKind kind>
@@ -81,15 +114,15 @@ class Route {
     CheckKindValid<kind>();
     return data_[static_cast<int>(kind)];
   }
+  template <NodeKind kind>
+  inline std::unordered_set<int>& GetGroupIds() {
+    CheckKindValid<kind>();
+    return data_[static_cast<int>(kind)];
+  }
 
   template <NodeKind kind>
   inline static void CheckKindValid() {
     static_assert(kind != NodeKind::__NUM__, "Invalid kind");
-  }
-
-  static Route& Global() {
-    static Route x;
-    return x;
   }
 
  private:
@@ -97,6 +130,7 @@ class Route {
   absl::InlinedVector<MpiGroup, 2> groups_{Route::NumGroups()};
   absl::InlinedVector<absl::InlinedVector<int, 8>, 2> node_orders_{Route::NumGroups()};
   bool initialized_{};
+  bool finalized_{};
 };
 
 }  // namespace ps
