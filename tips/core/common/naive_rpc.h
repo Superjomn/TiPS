@@ -56,10 +56,7 @@ class RpcService {
  public:
   explicit RpcService(RpcCallback callback);
 
-  ~RpcService() {
-    mpi_barrier();
-    CHECK_EQ(request_counter_, 0);
-  }
+  ~RpcService() { CHECK_EQ(request_counter_, 0); }
 
   /**
    * Get the service address belong to the \p rank -th node.

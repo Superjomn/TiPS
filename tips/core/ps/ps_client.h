@@ -34,10 +34,8 @@ struct PushRequest {
 
 struct PullCache {
   ZmqMessage msg;  // Hold the original message to avoid copy Vec.
-  struct Record {
-    uint64_t key;
-    AnyVec data;
-  };
+
+  using Record = AnyVec;
   // NOTE TODO(Superjomn) The order remains the same with the original keys order in the pull request, so we do not need
   // a map here if the offset is recorded.
   std::unordered_map<uint64_t, Record> data;
@@ -46,25 +44,22 @@ struct PullCache {
 template <typename TABLE>
 class PsClient {
  public:
-  using table_t = TABLE;
-  using key_t   = typename table_t::key_t;
-  using param_t = typename table_t::param_t;
+  using table_t    = TABLE;
+  using key_t      = typename table_t::key_t;
+  using param_t    = typename table_t::param_t;
+  using callback_t = std::function<void()>;
 
-  PsClient(const Route& route) : route_(route) {
+  PsClient(const Route& route, table_t* table) : route_(route), table_(table) {
+    CHECK(table_);
     pull_service_ = RpcServer::Global().LookupService(rpc::kPullService);
     push_service_ = RpcServer::Global().LookupService(rpc::kPushService);
     CHECK(pull_service_);
     CHECK(push_service_);
   }
 
-  bool Pull(const PullRequest& req, PullCache* cache);
+  bool Pull(const PullRequest& req, PullCache* cache, callback_t done);
 
-  bool Push(const PushRequest& req);
-
-  static PsClient& Global() {
-    static PsClient<TABLE> x(Route::Global());
-    return x;
-  }
+  bool Push(const PushRequest& req, callback_t done);
 
  private:
   flatbuffers::DetachedBuffer MakePullRequestBuffer(absl::Span<PullRequest::Record> req) const;
@@ -81,26 +76,40 @@ class PsClient {
 };
 
 template <typename TABLE>
-bool PsClient<TABLE>::Pull(const PullRequest& req, PullCache* cache) {
+bool PsClient<TABLE>::Pull(const PullRequest& req, PullCache* cache, callback_t done) {
   std::unordered_map<int, PullRequest> slots;  // shardid to request
   for (auto& rcd : req.data) {
-    int shardid     = table_->template ToShardId(rcd.key);  // group rank
+    int serverid    = table_->template ToServerId(rcd.key);  // group rank
     auto& mpi_group = route_.GetGroup<Route::NodeKind::PS_SERVER>();
-    int global_rank = mpi_group.ToWorldRank(shardid);
+    int global_rank = mpi_group.ToWorldRank(serverid);
     slots[global_rank].data.push_back(rcd);
   }
 
   // send to servers.
   for (auto& item : slots) {
     auto buffer = MakePullRequestBuffer(absl::Span<PullRequest::Record>(item.second.data));
-    RpcServer::Global().SendRequest(item.first, pull_service_, buffer.data(), buffer.size(), [](ZmqMessage&&) {
-      LOG(INFO) << "Pull request done";
-    });
+    MPI_LOG << "Send PULL request to PsServer #" << item.first;
+    RpcServer::Global().SendRequest(
+        item.first, pull_service_, buffer.data(), buffer.size(), [done, cache](ZmqMessage&& zmq_msg) {
+          LOG(INFO) << "Pull request done";
+          cache->msg = std::move(zmq_msg);
+
+          // load the parameters
+          auto pull_response = flatbuffers::GetRoot<message::PullResponse>(GetMsgContent(cache->msg));
+          for (auto* item : *pull_response->data()) {
+            Datatype dtype = ToDatatype(item->dtype());
+            AnyVec vec(
+                dtype, item->value()->size() / DatatypeNumBytes(dtype), const_cast<uint8_t*>(item->value()->data()));
+            cache->data[item->key()] = std::move(vec);
+          }
+
+          done();
+        });
   }
 }
 
 template <typename TABLE>
-bool PsClient<TABLE>::Push(const PushRequest& req) {
+bool PsClient<TABLE>::Push(const PushRequest& req, callback_t done) {
   std::unordered_map<int, std::vector<PushRequest::Record>> slots;  // shardid to request
   for (auto& rcd : req.data) {
     int shardid     = table_->template ToShardId(rcd.key);  // group rank
@@ -112,9 +121,11 @@ bool PsClient<TABLE>::Push(const PushRequest& req) {
   // send to servers.
   for (auto& item : slots) {
     auto buffer = MakePushRequestBuffer(absl::Span<PushRequest::Record>(item.second));
-    RpcServer::Global().SendRequest(item.first, push_service_, buffer.GetBuffer(), buffer.GetSize(), [](ZmqMessage&&) {
-      LOG(INFO) << "Push request done";
-    });
+    RpcServer::Global().SendRequest(
+        item.first, push_service_, buffer.GetBuffer(), buffer.GetSize(), [done](ZmqMessage&&) {
+          LOG(INFO) << "Push request done";
+          done();
+        });
   }
 }
 

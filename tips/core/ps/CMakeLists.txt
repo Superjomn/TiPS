@@ -20,4 +20,4 @@ cc_binary(test_ps_server SRCS ps_server_test.cc DEPS tipscore)
 mpi_test(test_ps_server 1)
 
 cc_binary(test_ps_client SRCS ps_client_test.cc DEPS tipscore)
-#mpi_test(test_ps_client 1)
+mpi_test(test_ps_client 6)

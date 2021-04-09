@@ -74,9 +74,33 @@ class MpiContext {
   static void Initialize(int argc, char** argv) { ZCHECK(MPI_Init(&argc, &argv)); }
   static void Finalize() { ZCHECK(MPI_Finalize()); }
 
+  int get_rank() const {
+    int rank{-1};
+    ZCHECK(MPI_Comm_rank(MPI_COMM_WORLD, &rank));
+    return rank;
+  }
+
+  int get_size() const {
+    int size{-1};
+    ZCHECK(MPI_Comm_size(MPI_COMM_WORLD, &size));
+    return size;
+  }
+
+  inline int rank() const {
+    CHECK_NE(rank_, -1);
+    return rank_;
+  }
+
+  inline int size() const {
+    CHECK_GT(size_, 0);
+    return size_;
+  }
+
   static MpiContext& Global();
 
  private:
+  int rank_{-1};
+  int size_{-1};
   std::vector<std::string> ip_table_;
   bool initialized_{};
 };
@@ -115,19 +139,43 @@ void mpi_broadcast(T* p, int count, int root) {
   }
 }
 
+template <typename T>
+void mpi_broadcast(T* p, int count, int root, int rank) {
+  NaiveBuffer wbuffer;
+  int len = 0;
+
+  if (rank == root) {
+    for (int i = 0; i < count; i++) {
+      wbuffer << p[i];
+    }
+    len = wbuffer.size();
+  }
+
+  // broadcast from root to all other nodes
+  MPI_Bcast(&len, 1, mpi_type_trait<int32_t>::type(), root, mpi_comm());
+
+  if (len > 0 && wbuffer.size() == 0) {
+    wbuffer.Require(len);
+  }
+  MPI_Bcast(reinterpret_cast<void*>(wbuffer.data()), len, MPI_BYTE, root, mpi_comm());
+
+  // read the data
+  NaiveBuffer rbuffer(static_cast<char*>(wbuffer.data()), wbuffer.size());
+  for (int i = 0; i < count; i++) {
+    rbuffer >> p[i];
+  }
+}
+
 // inline void mpi_barrier() { MPI_Barrier(mpi_comm()); }
 
-inline int mpi_size() {
-  int size;
-  ZCHECK(MPI_Comm_size(mpi_comm(), &size));
-  return size;
-}
+inline int mpi_size() { return MpiContext::Global().size(); }
 
 std::string mpi_rank_repr();
 
 void mpi_barrier(MPI_Comm comm = mpi_comm());
+void mpi_barrier(MPI_Comm comm, int size);
 
 }  // namespace tips
 
-#define MPI_LOG LOG(INFO) << ::tips::mpi_rank_repr() << " "
-#define MPI_WARN LOG(INFO) << ::tips::mpi_rank_repr() << " "
+#define MPI_LOG LOG(INFO) << ::tips::mpi_rank_repr()
+#define MPI_WARN LOG(INFO) << ::tips::mpi_rank_repr()

@@ -92,6 +92,7 @@ class PullAccessAgent {
     if (!table_->Find(key, param)) {
       access_method_.InitParam(key, param, dtype, length);
       table_->Assign(key, param);
+      table_->Find(key, param);
     }
 
     access_method_.GetPullValue(key, param, val);

@@ -16,11 +16,6 @@
 namespace tips {
 namespace ps {
 
-using PushRequest  = FBS_TypeBufferOwned<message::PushRequest>;
-using PullRequest  = FBS_TypeBufferOwned<message::PullRequest>;
-using PushResponse = FBS_TypeBufferOwned<message::PushResponse>;
-using PullResponse = FBS_TypeBufferOwned<message::PullResponse>;
-
 template <typename TABLE, typename PULL_ACCESS_METHOD, typename PUSH_ACCESS_METHOD>
 class PsServer {
  public:
@@ -45,19 +40,16 @@ class PsServer {
     AddRpcService();
   }
 
-  void Initialize() {
-    if (!table_->Initialized()) table_->Initialize();
+  void StartService() {
+    if (!table_->is_service_start()) table_->StartService();
   }
 
-  void Finalize() {
-    if (!table_->Finalized()) table_->Finalize();
+  void StopService() {
+    if (!table_->is_service_stop()) table_->StopService();
   }
 
  private:
   void AddRpcService();
-
-  void InitPullService();
-  void InitPushService();
 
   /**
    * Process a Pull request.
@@ -80,10 +72,6 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::AddRpcService() {
   // Get a PullRequest message, and response the PullResponse.
   RpcCallback pull_callback = [this](ZmqMessage&& zmq_msg) {
     MPI_LOG << "Get a PullRequest";
-    // CHECK(pull_channel_);
-    // Just push the message to the channel, limit the workload of RPC threads.
-    // pull_channel_->WriteMove(std::move(zmq_msg));
-
     PullTask(std::move(zmq_msg));
   };
 
@@ -93,9 +81,6 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::AddRpcService() {
   RpcServer::Global().TryAddService(rpc::kPullService, pull_callback);
   RpcServer::Global().TryAddService(rpc::kPushService, push_callback);
 }
-
-template <typename TABLE, typename PULL_ACCESS_METHOD, typename PUSH_ACCESS_METHOD>
-void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::InitPullService() {}
 
 namespace {
 
@@ -196,6 +181,7 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::PullTask(ZmqMessag
           message::KeyItemBuilder key_builder(snapshot->resp_builder);
           key_builder.add_value(flat_data);
           key_builder.add_key(key);
+          key_builder.add_dtype(ToMessageDataType(value.dtype()));
           snapshot->datas[offset] = key_builder.Finish();
         }
       }

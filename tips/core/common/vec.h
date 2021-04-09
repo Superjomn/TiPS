@@ -199,7 +199,7 @@ class Vec {
     CHECK_EQ(in0.size(), in1.size());
     CHECK_EQ(in0.size(), out.size());
 
-    for (int i = 0; i < in0.size(); i++) {
+    for (size_t i = 0; i < in0.size(); i++) {
       out_data[i] = in0_data[i] * in1_data[i];
     }
   }
@@ -210,7 +210,7 @@ class Vec {
 
     CHECK_EQ(in0.size(), out.size());
 
-    for (int i = 0; i < in0.size(); i++) {
+    for (size_t i = 0; i < in0.size(); i++) {
       out_data[i] = in0_data[i] * scale;
     }
   }
@@ -223,7 +223,7 @@ class Vec {
     CHECK_EQ(in0.size(), in1.size());
     CHECK_EQ(in0.size(), out.size());
 
-    for (int i = 0; i < in0.size(); i++) {
+    for (size_t i = 0; i < in0.size(); i++) {
       out_data[i] = in0_data[i] + in1_data[i];
     }
   }

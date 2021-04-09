@@ -57,17 +57,14 @@ class MpiGroup {
     return mpi_comm_;
   }
 
-  int mpi_size() const {
-    CHECK(valid());
-    return mpi_size_;
-  }
+  int mpi_size() const { return data_.size(); }
 
   int mpi_rank() const {
     CHECK(valid());
     return mpi_rank_;
   }
 
-  void Barrier() const { ZCHECK(MPI_Barrier(mpi_comm())); }
+  void Barrier() const { ::tips::mpi_barrier(this->mpi_comm()); }
 
   void AllReduce(void* sendbuf, void* recvbuf, int count, MPI_Datatype datatype, MPI_Op op);
 

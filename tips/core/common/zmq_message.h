@@ -23,6 +23,12 @@ class ZmqMessage : public std::enable_shared_from_this<ZmqMessage> {
     memcpy(buffer(), buf, size);
   }
 
+  ZmqMessage& operator=(ZmqMessage&& other) {
+    data_ = other.data_;
+    ZCHECK(zmq_msg_init(&other.data_));
+    return *this;
+  }
+
   void Reset() {
     ZCHECK(zmq_msg_close(&data_));
     ZCHECK(zmq_msg_init(&data_));

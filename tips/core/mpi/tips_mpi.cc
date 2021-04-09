@@ -16,18 +16,16 @@ MpiContext::MpiContext() {
     Initialize();
   }
 
-  int rank;
-  int size;
-  CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);
-  CHECK_EQ(MPI_Comm_size(mpi_comm(), &size), 0);
+  ZCHECK(MPI_Comm_rank(mpi_comm(), &rank_));
+  ZCHECK(MPI_Comm_size(mpi_comm(), &size_));
 
-  ip_table_.resize(mpi_size(), "");
-  ip_table_[rank] = GetLocalIp();
+  ip_table_.resize(size_, "");
+  ip_table_[rank_] = GetLocalIp();
 
-  for (int i = 0; i < mpi_size(); i++) {
-    mpi_broadcast(&ip_table_[i], 1, i);
+  for (int i = 0; i < size_; i++) {
+    mpi_broadcast(&ip_table_[i], 1, i, rank_);
   }
-  mpi_barrier();
+  mpi_barrier(mpi_comm(), size_);
 }
 
 bool MpiContext::IsInitialized() {
@@ -44,30 +42,32 @@ bool MpiContext::IsFinalized() {
 
 void MpiContext::Initialize(int *argc, char ***argv) { ZCHECK(MPI_Init(argc, argv)) << "MPI init failed"; }
 
-int mpi_rank() {
-  int rank{-1};
-  CHECK_EQ(MPI_Comm_rank(mpi_comm(), &rank), 0);
-  return rank;
-}
+int mpi_rank() { return MpiContext::Global().rank(); }
 
 std::string mpi_rank_repr() { return absl::StrFormat("#rank-[%d/%d]", mpi_rank(), mpi_size()); }
 
 void mpi_barrier(MPI_Comm comm) {
-  // MPI_Barrier uses busy waiting. Try to avoid.
-  // MPI_Barrier(mpi_comm());
+  int size;
+  ZCHECK(MPI_Comm_size(comm, &size));
+  mpi_barrier(comm, size);
+}
 
-  std::vector<MPI_Request> reqs(mpi_size(), MPI_REQUEST_NULL);
+void mpi_barrier(MPI_Comm comm, int size) {
+  // MPI_Barrier uses busy waiting. Try to avoid.
+  // MPI_Barrier(comm);
+
+  std::vector<MPI_Request> reqs(size, MPI_REQUEST_NULL);
   int dummy = 0;
 
-  for (int i = 0; i < mpi_size(); i++) {
+  for (int i = 0; i < size; i++) {
     MPI_Irecv(&dummy, 1, MPI_INT, i, 0, comm, &reqs[i]);
   }
 
-  for (int i = 0; i < mpi_size(); i++) {
+  for (int i = 0; i < size; i++) {
     MPI_Send(&dummy, 1, MPI_INT, i, 0, comm);
   }
 
-  for (int i = 0; i < mpi_size(); i++) {
+  for (int i = 0; i < size; i++) {
     for (unsigned long x = 1;; x = std::min(x * 2, 2000UL)) {
       int flag = 0;
       MPI_Test(&reqs[i], &flag, MPI_STATUSES_IGNORE);

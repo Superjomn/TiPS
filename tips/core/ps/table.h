@@ -7,7 +7,7 @@
 #include "tips/core/mpi/mpi_group.h"
 #include "tips/core/mpi/tips_mpi.h"
 
-#define TABLE_SHARD_NUM 8
+#define TABLE_SHARD_NUM 1
 
 namespace tips {
 namespace ps {
@@ -35,18 +35,20 @@ class Table {
     return server_group_.mpi_size() * local_shard_num();
   }
 
+  const MpiGroup& server_group() const { return server_group_; }
+
   /**
    * Initialize a Table.
    */
-  void Initialize();
+  void StartService();
 
   /**
    * Finalize a Table.
    */
-  void Finalize();
+  void StopService();
 
-  bool Initialized() const { return !shards_.empty(); }
-  bool Finalized() const { return finalized_; }
+  bool is_service_start() const { return !shards_.empty(); }
+  bool is_service_stop() const { return finalized_; }
 
   /**
    * Get the shard information for \param i -th global shard.
@@ -65,20 +67,19 @@ class Table {
   }
 
   Channel<std::function<void()>>& server_channel(int i) {
-    CHECK_LT(i, server_channels_.size());
+    CHECK_LT(i, server_channels_.size()) << mpi_rank_repr();
     return *server_channels_[i];
   }
 
   Channel<std::function<void()>>& client_channel() { return *client_channel_; }
 
  private:
-  void set_local_shrard_num(int x) {
+  void set_local_shard_num(int x) {
     CHECK_GE(x, 1);
     local_shard_num_ = x;
   }
 
   int local_shard_num_{};
-  int shard_num_{};
 
   std::vector<ShardInfo> local_shards_;
   std::vector<ShardInfo> shards_;

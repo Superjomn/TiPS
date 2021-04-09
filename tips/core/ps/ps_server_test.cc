@@ -69,7 +69,7 @@ void TestBasic() {
   push_access_t push_access(&table, 1);
 
   server_t server(pull_access, push_access, &table);
-  server.Initialize();
+  server.StartService();
 
   auto pull_request = CreatePullRequest({1, 2, 3});
 
@@ -95,7 +95,7 @@ void TestBasic() {
       auto* val = reinterpret_cast<const float*>(item->value()->data());
       LOG(INFO) << "size: " << item->value()->size();
       for (int i = 0; i < 10; i++) {
-        CHECK_NEAR(val[i], 0, 1e-5);
+        CHECK_NEAR(val[i], 0.f, 1e-5);
       }
     }
 
@@ -123,7 +123,7 @@ void TestBasic() {
     cv.wait(lock);
   }
 
-  server.Finalize();
+  server.StopService();
 
   Route::Global().Finalize();
 

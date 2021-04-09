@@ -24,7 +24,6 @@ class SparseTablePullAccess : public PullAccessMethod<KEY, PARAM, VALUE> {
     param_t x(dtype, length);  // move
     param = std::move(x);
     memset(param.buffer(), 0, param.num_bytes());
-    LOG(INFO) << "Init param: " << key << ": " << param;
   }
 
   /**
@@ -33,10 +32,7 @@ class SparseTablePullAccess : public PullAccessMethod<KEY, PARAM, VALUE> {
    */
   void GetPullValue(const key_t &key, const param_t &param, pull_val_t &val) override { val.ShadowCopyFrom(param); }
 
-  void ApplyPullValue(const key_t &key, param_t &param, const pull_val_t &val) override {
-    param = val;
-    LOG(INFO) << "get param: " << param;
-  }
+  void ApplyPullValue(const key_t &key, param_t &param, const pull_val_t &val) override { param = val; }
 
  private:
   table_t *table_{};
