@@ -23,9 +23,16 @@ Download from https://www.open-mpi.org/software/ompi/v4.1/
 
 apt-get install libzmq3-dev
 
+# Usage
+Run the following commands after compile the project.
+
+``` sh
+cd examples
+mpirun --allow-run-as-root -np 4 python tensorflow2_keras_mnist.py
+```
+
 # References
 I had read and learned the following projects:
 
 1. [Horovod](https://github.com/horovod/horovod) for collective modules and TensorFlow and Pytorch support,
 2. [SwiftSnails](https://github.com/Superjomn/SwiftSnails), my own project that implements a naive PS without MPI.
-
