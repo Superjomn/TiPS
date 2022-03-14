@@ -9,6 +9,12 @@
 namespace tips {
 namespace ps {
 
+/**
+ * This is a parameter cache in worker nodes.
+ * @tparam KEY Type of the keys.
+ * @tparam PARAM Type of the parameters.
+ * @tparam GRAD Type of the gradients.
+ */
 template <typename KEY, typename PARAM, typename GRAD>
 class WorkerParamCache {
  public:

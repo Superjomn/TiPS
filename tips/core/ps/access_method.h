@@ -60,7 +60,7 @@ class PushAccessMethod {
  * @param AccessMethod Server-side operation on parameters
  */
 template <typename Table, typename AccessMethod>
-class PullAccessAgent {
+class ServerPullAccessAgent {
  public:
   using table_t = Table;
   using key_t   = typename Table::key_t;
@@ -70,14 +70,14 @@ class PullAccessAgent {
   using pull_val_t      = typename AccessMethod::pull_val_t;
   using pull_param_t    = typename AccessMethod::param_t;
 
-  explicit PullAccessAgent() {}
-  void Init(table_t &table, access_method_t &&access_method) {
-    table_         = &table;
+  ServerPullAccessAgent() = default;
+  void Init(table_t *table, access_method_t &&access_method) {
+    table_         = table;
     access_method_ = std::move(access_method);
   }
 
-  explicit PullAccessAgent(table_t &table, access_method_t &&access_method)
-      : table_(&table), access_method_(std::move(access_method)) {}
+  explicit ServerPullAccessAgent(table_t *table, access_method_t &&access_method)
+      : table_(table), access_method_(std::move(access_method)) {}
 
   int ToShardId(const key_t &key) { return table_->ToShardId(key); }
 
@@ -110,7 +110,7 @@ class PullAccessAgent {
  * @brief Server-side push agent
  */
 template <typename Table, typename AccessMethod>
-class PushAccessAgent {
+class ServerPushAccessAgent {
  public:
   using table_t = Table;
   using key_t   = typename Table::key_t;
@@ -121,11 +121,11 @@ class PushAccessAgent {
 
   using access_method_t = AccessMethod;
 
-  explicit PushAccessAgent() {}
-  void Init(table_t &table) { table_ = &table; }
+  explicit ServerPushAccessAgent() {}
+  void Init(table_t *table) { table_ = table; }
 
-  explicit PushAccessAgent(table_t &table, access_method_t &&access_method)
-      : table_(&table), access_method_(std::move(access_method)) {}
+  explicit ServerPushAccessAgent(table_t *table, access_method_t &&access_method)
+      : table_(table), access_method_(std::move(access_method)) {}
 
   /**
    * @brief update parameters with the value from remote worker nodes
@@ -150,16 +150,18 @@ SparseTable<Key, Value> &global_sparse_table() {
 }
 
 template <typename Table, typename AccessMethod>
-auto MakePullAccess(Table &table, AccessMethod access_method) -> std::unique_ptr<PullAccessAgent<Table, AccessMethod>> {
-  std::unique_ptr<PullAccessAgent<Table, AccessMethod>> res(
-      new PullAccessAgent<Table, AccessMethod>(table, std::move(access_method)));
+auto MakePullAccess(Table *table, AccessMethod access_method)
+    -> std::unique_ptr<ServerPullAccessAgent<Table, AccessMethod>> {
+  std::unique_ptr<ServerPullAccessAgent<Table, AccessMethod>> res(
+      new ServerPullAccessAgent<Table, AccessMethod>(table, std::move(access_method)));
   return std::move(res);
 }
 
 template <typename Table, typename AccessMethod>
-auto MakePushAccess(Table &table, AccessMethod access_method) -> std::unique_ptr<PushAccessAgent<Table, AccessMethod>> {
-  std::unique_ptr<PushAccessAgent<Table, AccessMethod>> res(
-      new PushAccessAgent<Table, AccessMethod>(table, std::move(access_method)));
+auto MakePushAccess(Table *table, AccessMethod access_method)
+    -> std::unique_ptr<ServerPushAccessAgent<Table, AccessMethod>> {
+  std::unique_ptr<ServerPushAccessAgent<Table, AccessMethod>> res(
+      new ServerPushAccessAgent<Table, AccessMethod>(table, std::move(access_method)));
   return std::move(res);
 }
 

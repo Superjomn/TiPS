@@ -102,7 +102,7 @@ struct alignas(64) SparseTableShard {
 };  // struct SparseTableShard
 
 /**
- * @brief container of sparse parameters
+ * @brief Container of sparse parameters
  *
  * a SparseTable has several shards to split the storage and operation of
  * parameters.
@@ -115,34 +115,35 @@ class SparseTable : public Table {
   using param_t = value_t;
   typedef SparseTableShard<key_t, value_t> shard_t;
 
-  SparseTable() { local_shards_.resize(local_shard_num()); }
+  SparseTable(int num_nodes, int num_local_shards) : Table(num_nodes, num_local_shards) {
+    local_shards_.resize(local_shard_num());
+  }
 
+  //! Get a local shard.
   shard_t &local_shard(int shard_id) {
     CHECK_LT(shard_id, local_shard_num());
     return local_shards_[shard_id];
   }
 
   bool Find(const key_t &key, value_t *&val) {
-    int shard_id       = ToShardId(key);
     int local_shard_id = ToHashValue(key) % local_shard_num();
     return local_shard(local_shard_id).Find(key, val);
   }
 
   bool Find(const key_t &key, value_t &val) {
-    int shard_id       = ToShardId(key);
     int local_shard_id = ToHashValue(key) % local_shard_num();
     return local_shard(local_shard_id).Find(key, val);
   }
 
   void Assign(const key_t &key, const value_t &val) {
-    int shard_id = ToShardId(key);
-    local_shard(shard_id).Assign(key, val);
+    int local_shard_id = ToShardId(key) % local_shard_num();
+    local_shard(local_shard_id).Assign(key, val);
   }
 
   /**
    * output parameters to ostream
    */
-  std::string __str__() {
+  std::string __str__() const {
     std::stringstream ss;
     for (int i = 0; i < shard_num(); i++) {
       ss << local_shard(i);

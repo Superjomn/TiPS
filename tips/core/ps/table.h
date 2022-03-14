@@ -21,18 +21,20 @@ class Table {
     int local_shard_id{-1};
   };
 
-  explicit Table() {
-    // TODO(Superjomn) make it a config.
-    local_shard_num_ = TABLE_SHARD_NUM;
+  /**
+   * @param num_nodes Number of the MPI nodes.
+   * @param local_shard_num Number of shards inside a node.
+   */
+  explicit Table(int num_nodes, int local_shard_num)
+      : local_shard_num_(local_shard_num), shard_num_(local_shard_num * num_nodes) {
+    LOG(INFO) << "set local_shard_num: " << local_shard_num;
+    LOG(INFO) << "shard_num: " << shard_num();
   }
 
   //! Get number of shards locate in local.
   int local_shard_num() const { return local_shard_num_; }
   //! Get number of overall shards across the whole world for this application.
-  int shard_num() const {
-    // TODO(Superjomn) Replace mpi_size() to server node number.
-    return mpi_size() * local_shard_num();
-  }
+  int shard_num() const { return shard_num_; }
 
   /**
    * Initialize a Table.
@@ -67,13 +69,8 @@ class Table {
   Channel<std::function<void()>>& client_channel() { return *client_channel_; }
 
  private:
-  void set_local_shrard_num(int x) {
-    CHECK_GE(x, 1);
-    local_shard_num_ = x;
-  }
-
-  int local_shard_num_{};
-  int shard_num_{};
+  const int local_shard_num_;
+  const int shard_num_;
 
   std::vector<ShardInfo> local_shards_;
   std::vector<ShardInfo> shards_;
