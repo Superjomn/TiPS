@@ -242,7 +242,7 @@ void EnqueueTensorCollective(const OpRecord& record, message::RequestType reques
 
 Status PerformCollectiveOp(OpRecord* op_record,
                            message::ResponseType response_type,
-                           const std::string name,
+                           const std::string& name,
                            const std::string& error_msg) {
   if (response_type != message::ResponseType_ALLREDUCE && response_type != message::ResponseType_ALLGATHER &&
       response_type != message::ResponseType_BROADCAST && response_type != message::ResponseType_ERROR) {

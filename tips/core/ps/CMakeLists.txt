@@ -1,6 +1,5 @@
 core_gather_srcs(SRCS
         table.cc
-        server.cc
         dense_table.cc
         sparse_table.cc
         access_method.cc
