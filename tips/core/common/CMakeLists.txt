@@ -13,6 +13,7 @@ core_gather_srcs(SRCS
         thread_group.cc
         rwlock.cc
         vec.cc
+        zmq_listener.cc
         )
 
 cc_test(test_naive_buffer SRCS naive_buffer_test.cc DEPS tipscore)
