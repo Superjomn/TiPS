@@ -7,6 +7,7 @@ core_gather_srcs(SRCS
         dense_access_method.cc
         param.cc
         sparse_access_method.cc
+        server_service.cc
         )
 
 cc_test(test_dense_table SRCS dense_table_test.cc DEPS tipscore)

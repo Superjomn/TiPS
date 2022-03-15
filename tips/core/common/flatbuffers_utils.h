@@ -100,4 +100,9 @@ void FBS_TypeBufferOwned<FBS_T>::Copy(const uint8_t* buffer, size_t len) {
   std::memcpy(buffer_, buffer, len);
 }
 
+template <typename FBS_TYPE>
+const FBS_TYPE* GetFbsData(const void* buffer) {
+  return flatbuffers::GetRoot<FBS_TYPE>(buffer);
+}
+
 }  // namespace tips

@@ -9,9 +9,10 @@ It supports two distribution acceleration approaches:
 Take a look at [tips/core/ps](https://github.com/Superjomn/TiPS/tree/main/tips/core/ps) and [tips/core/collective](https://github.com/Superjomn/TiPS/tree/main/tips/core/collective) for more details.
 
 # Current status
-This is a part-time job when I am had a sick leave for fracture. The PS and Collective module themself are well developed and tested, while only the distributed training part is finished evaluation with real TensorFlow resnet50 model.
+This is a part-time job when I am had a sick leave for fracture. The PS and Collective module themself are well developed and tested, while only the collective distributed training part is finished evaluation with real TensorFlow resnet50 model.
 
 Currently, this project is hold for lack of time and further motivation.
+
 
 # dependencies
 
