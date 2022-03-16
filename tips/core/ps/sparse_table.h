@@ -12,7 +12,9 @@
 #include <unordered_map>
 
 #include "tips/core/common/common.h"
+#include "tips/core/common/flatbuffers_utils.h"
 #include "tips/core/common/rwlock.h"
+#include "tips/core/message/ps_messages_generated.h"
 #include "tips/core/ps/table.h"
 
 namespace tips {
@@ -176,14 +178,7 @@ class SparseTable : public Table {
   }
 
   //! Get number of elements in this table.
-  size_t size() const {
-    size_t res = 0;
-    for (int i = 0; i < shard_num(); i++) {
-      auto &shard = local_shards_[i];
-      res += shard.size();
-    }
-    return res;
-  }
+  size_t size() const;
 
   // TODO assign protected
   int ToShardId(const key_t &key) { return ToHashValue(key) % shard_num(); }

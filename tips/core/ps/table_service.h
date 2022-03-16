@@ -5,6 +5,7 @@
 #include "tips/core/message/ps_messages_generated.h"
 
 namespace tips {
+namespace ps {
 
 enum class PsTableType {
   kSparse     = 0,
@@ -17,16 +18,6 @@ enum class PsOptimizeStrategyType {
 };
 
 /**
- * Interface for the access method for any dense tables.
- */
-class TableAccessAgent {
- public:
-  virtual std::unique_ptr<FBS_TypeBufferOwned<ps::message::PullResponse>> Pull(const ps::message::PullRequest& msg) = 0;
-
-  virtual std::unique_ptr<FBS_TypeBufferOwned<ps::message::PushResponse>> Push(const ps::message::PushRequest& msg) = 0;
-};
-
-/**
  * TableService: A service for listening for PULL PUSH requests.
  */
 class TableService {
@@ -35,4 +26,5 @@ class TableService {
   void AddTable(uint64_t talbe_id, PsTableType table_type, int num_shards);
 };
 
+}  // namespace ps
 }  // namespace tips

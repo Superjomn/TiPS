@@ -69,5 +69,10 @@ void Table::Finalize() {
   mpi_barrier();
 }
 
+const Table::ShardInfo& Table::shard_info(int i) const {
+  CHECK_LT(i, shard_num());
+  return shards_[i];
+}
+
 }  // namespace ps
 }  // namespace tips

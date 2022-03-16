@@ -26,10 +26,7 @@ class Table {
    * @param local_shard_num Number of shards inside a node.
    */
   explicit Table(int num_nodes, int local_shard_num)
-      : local_shard_num_(local_shard_num), shard_num_(local_shard_num * num_nodes) {
-    LOG(INFO) << "set local_shard_num: " << local_shard_num;
-    LOG(INFO) << "shard_num: " << shard_num();
-  }
+      : local_shard_num_(local_shard_num), shard_num_(local_shard_num * num_nodes) {}
 
   //! Get number of shards locate in local.
   int local_shard_num() const { return local_shard_num_; }
@@ -51,10 +48,7 @@ class Table {
   /**
    * Get the shard information for \param i -th global shard.
    */
-  const ShardInfo& shard_info(int i) const {
-    CHECK_LT(i, shard_num());
-    return shards_[i];
-  }
+  const ShardInfo& shard_info(int i) const;
 
   /**
    * Get the shard information for the \param i -th local shard.
