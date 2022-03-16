@@ -1,5 +1,6 @@
 #pragma once
 
+#include <absl/container/inlined_vector.h>
 #include <absl/types/span.h>
 
 #include "tips/core/common/common.h"
@@ -84,7 +85,6 @@ class DenseTable : public Table {
   }
 
   void Resize(size_t size) {
-    // mpi_barrier();
     size_ = size;
     boundaries_.resize(shard_num() + 1);
 
@@ -98,14 +98,10 @@ class DenseTable : public Table {
       std::vector<T> new_data(boundaries_[shard_id + 1] - boundaries_[shard_id]);
       local_shard(i).SetData(new_data);
     }
-
-    // mpi_barrier();
   }
 
   template <typename Func>
   void ForEach(Func&& func) {
-    // mpi_barrier();
-
     for (int i = 0; i < local_shard_num(); i++) {
       record_type* data = &local_shard(i).data()[0];
       int shard_id      = local_shard(i).shard_id;
@@ -119,15 +115,13 @@ class DenseTable : public Table {
         }
       });
     }
-
-    // mpi_barrier();
   }
 
   void Load(const std::string& path);
   void Save(const std::string& path) const;
 
  private:
-  std::unique_ptr<std::vector<shard_type>> local_shards_;
+  absl::InlinedVector<shard_type, 8> local_shards_;
   std::vector<size_t> boundaries_;
   size_t size_{};
 };

@@ -143,12 +143,6 @@ class ServerPushAccessAgent {
   AccessMethod access_method_;
 };  // class PushAccessAgent
 
-template <class Key, class Value>
-SparseTable<Key, Value> &global_sparse_table() {
-  static SparseTable<Key, Value> table;
-  return table;
-}
-
 template <typename Table, typename AccessMethod>
 auto MakePullAccess(Table *table, AccessMethod access_method)
     -> std::unique_ptr<ServerPullAccessAgent<Table, AccessMethod>> {

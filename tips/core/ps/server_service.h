@@ -12,7 +12,7 @@ class ServerService {
    * The server-side service that process the PUSH and PULL requests.
    */
   void AddPsService(RpcServer* server) {
-    auto callback = [server](ZmqMessage&& zmq_msg) {
+    auto callback = [server, this](ZmqMessage&& zmq_msg) {
       const RpcMsgHead* msg_head = GetMsgHead(zmq_msg);
       const void* msg_content    = GetMsgContent(zmq_msg);
       CHECK(msg_head);
@@ -28,8 +28,10 @@ class ServerService {
         // parse the content
         if (msg_head->is_ps_pull()) {
           auto pull_request = GetFbsData<ps::message::PullRequest>(msg_content);
-
+          ProceedPull(*pull_request);
         } else if (msg_head->is_ps_push()) {
+          auto push_request = GetFbsData<ps::message::PushRequest>(msg_content);
+          ProceedPush(*push_request);
         }
       }
     };

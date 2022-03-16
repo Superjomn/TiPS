@@ -13,6 +13,11 @@ enum MessageType : short {
   PUSH = 1
 }
 
+enum OptimizeStrategyType: short {
+  SGD = 0,
+  AdaGrad = 1
+}
+
 table MessageMeta {
   client_id: int;
   message_id: int;

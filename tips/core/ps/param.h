@@ -22,7 +22,7 @@ class WorkerParamCache {
   using param_t = PARAM;
   using grad_t  = GRAD;
 
-  WorkerParamCache() {}
+  WorkerParamCache() = default;
 
   void InitKeys(const std::unordered_set<key_t>& keys) {
     RwLockWriteGuard lk(rwlock_);
