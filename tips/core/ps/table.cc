@@ -3,27 +3,27 @@
 namespace tips {
 namespace ps {
 
-void Table::Initialize() {
-  mpi_barrier();
-  CHECK(!Initialized()) << "Duplicate initializing Table found";
-  CHECK_GT(mpi_size(), 0);
-  set_local_shrard_num(TABLE_SHARD_NUM);
-  LOG(INFO) << "mpi_size: " << mpi_size();
-  LOG(INFO) << "local_shard_num: " << local_shard_num_;
+void Table::StartService() {
+  server_group().Barrier();
+  CHECK(!is_service_start()) << "Duplicate initializing Table found";
+  CHECK_GT(server_group().mpi_size(), 0);
+  set_local_shard_num(TABLE_SHARD_NUM);
+  MPI_LOG << "mpi_size: " << server_group().mpi_size();
+  MPI_LOG << "local_shard_num: " << local_shard_num_;
 
-  shard_num_ = mpi_size() * local_shard_num_;
-  shards_.resize(shard_num_);
+  CHECK_GT(shard_num(), 0);
+  shards_.resize(shard_num());
   local_shards_.resize(local_shard_num_);
 
   // Global shardid to local shardid
-  for (int i = 0; i < shard_num_; i++) {
+  for (int i = 0; i < shard_num(); i++) {
     shards_[i].shard_id       = i;
-    shards_[i].local_shard_id = i / mpi_size();
+    shards_[i].local_shard_id = i / server_group().mpi_size();
   }
 
   // Local shard id to global shard id
   for (int i = 0; i < local_shard_num_; i++) {
-    local_shards_[i].shard_id       = i * mpi_size() + mpi_rank();
+    local_shards_[i].shard_id       = i * server_group().mpi_size() + server_group().mpi_rank();
     local_shards_[i].local_shard_id = i;
   }
 
@@ -36,41 +36,40 @@ void Table::Initialize() {
   // TODO(Superjomn) Make this shared by all the threads in the same process?
   local_thread_group_.SetThreadNum(local_shard_num_);
   local_thread_group_.Start([this](int tid) {
-    LOG(INFO) << "Local shard thread #" << tid << " start";
+    MPI_LOG << "Local shard thread #" << tid << " start";
     std::function<void()> task;
     while (client_channel_->Read(&task)) {
       task();
     }
-    LOG(INFO) << "Local shard thread #" << tid << " quit";
+    MPI_LOG << "Local shard thread #" << tid << " quit";
   });
 
   server_thread_group_.SetThreadNum(local_shard_num_);
   server_thread_group_.Start([this](int tid) {
-    LOG(INFO) << "Server shard thread #" << tid << " start";
+    MPI_LOG << "Server shard thread #" << tid << " start";
     auto channel = server_channels_[tid];
     std::function<void()> func;
     while (channel->Read(&func)) {
       func();
     }
-    LOG(INFO) << "Server shard thread #" << tid << " quit";
+    MPI_LOG << "Server shard thread #" << tid << " quit";
   });
 
-  mpi_barrier();
+  server_group().Barrier();
 }
 
-void Table::Finalize() {
-  mpi_barrier();
-  CHECK(Initialized());
+void Table::StopService() {
+  finalized_ = true;
+
+  CHECK(is_service_start());
 
   for (auto& channel : server_channels_) {
     channel->Close();
   }
-
   server_thread_group_.Join();
+
   client_channel_->Close();
   local_thread_group_.Join();
-
-  mpi_barrier();
 }
 
 }  // namespace ps

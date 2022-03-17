@@ -20,6 +20,8 @@ void MpiGroup_basic() {
 
   mpi_barrier();
 
+  group.Finalize();
+
   MPI_LOG << "after barrirer";
 }
 

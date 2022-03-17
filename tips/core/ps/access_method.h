@@ -22,7 +22,7 @@ class PullAccessMethod {
   /**
    * @brief assign an initial value to param
    */
-  virtual void InitParam(const key_t &key, param_t &param) = 0;
+  virtual void InitParam(const key_t &key, param_t &param, Datatype dtype, int length) = 0;
 
   /**
    * @brief assign param to val
@@ -71,6 +71,9 @@ class PullAccessAgent {
   using pull_param_t    = typename AccessMethod::param_t;
 
   explicit PullAccessAgent() {}
+  PullAccessAgent(table_t *table, access_method_t &&access_method)
+      : table_(table), access_method_(std::move(access_method)) {}
+
   void Init(table_t &table, access_method_t &&access_method) {
     table_         = &table;
     access_method_ = std::move(access_method);
@@ -84,11 +87,12 @@ class PullAccessAgent {
   /**
    * Server-side query parameter
    */
-  void GetPullValue(const key_t &key, pull_val_t &val) {
+  void GetPullValue(const key_t &key, pull_val_t &val, Datatype dtype = Datatype::kFp32, int length = 1) {
     pull_param_t param;
     if (!table_->Find(key, param)) {
-      access_method_.InitParam(key, param);
+      access_method_.InitParam(key, param, dtype, length);
       table_->Assign(key, param);
+      table_->Find(key, param);
     }
 
     access_method_.GetPullValue(key, param, val);
@@ -122,7 +126,7 @@ class PushAccessAgent {
   using access_method_t = AccessMethod;
 
   explicit PushAccessAgent() {}
-  void Init(table_t &table) { table_ = &table; }
+  PushAccessAgent(table_t *table, access_method_t &&access) : table_(table), access_method_(std::move(access)) {}
 
   explicit PushAccessAgent(table_t &table, access_method_t &&access_method)
       : table_(&table), access_method_(std::move(access_method)) {}
@@ -137,6 +141,8 @@ class PushAccessAgent {
     CHECK(param);
     access_method_.ApplyPushValue(key, *param, push_val);
   }
+
+  int ToShardId(const key_t &key) { return table_->ToShardId(key); }
 
  private:
   table_t *table_{};

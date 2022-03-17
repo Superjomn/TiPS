@@ -1,58 +1,31 @@
 #pragma once
 
+#include <absl/types/span.h>
 #include <cmath>
 
 #include "tips/core/common/common.h"
 
 namespace tips {
-namespace ps {
 
+/**
+ * Vec simplifies the operation of vectors, it doesn't own the data, but just hold the address, similar to absl::Span.
+ */
 template <typename T>
 class Vec {
  public:
   using value_type = T;
   using self_type  = Vec<T>;
 
-  Vec() {}
-
-  ~Vec() {
-    if (data_) delete data_;
-  }
-
-  Vec(size_t size) { Init(size); }
+  Vec(absl::Span<T> data) : data_(data.data()), size_(data.size()) {}
 
   Vec(const Vec &other) {
-    if (size_ != other.size()) {
-      if (data_) {
-        delete data_;
-        data_ = nullptr;
-        size_ = 0;
-      }
-
-      Init(other.size());
-    }
-
-    std::memcpy(data(), other, size() * sizeof(value_type));
-  }
-
-  Vec(Vec &&other) {
-    if (data_) {
-      delete data_;
-      data_ = nullptr;
-    }
-    data_       = other.data_;
-    size_       = other.size_;
-    other.data_ = nullptr;
-    other.size_ = 0;
+    data_ = other.data_;
+    size_ = other.size_;
   }
 
   Vec &operator=(const Vec &other) {
-    if (this != &other) {
-      size_ = other.size();
-      Reset(size_);
-
-      std::memcpy(data(), other, size() * sizeof(value_type));
-    }
+    data_ = other.data_;
+    size_ = other.size_;
     return *this;
   }
 
@@ -74,10 +47,9 @@ class Vec {
     return std::move(vs);
   }
 
-  void Init(size_t size, bool random_init = false) {
-    CHECK_GT(size, 0);
+  void Init(bool random_init = false) {
+    CHECK_GT(size_, 0);
     CHECK(!data_) << "data can be inited only once";
-    Reset(size);
     for (size_t i = 0; i < size_; ++i) {
       data()[i] = 0.0;
     }
@@ -219,24 +191,60 @@ class Vec {
     return a;
   }
 
+  static void Mul(Vec<T> in0, Vec<T> in1, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *in1_data = in1.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), in1.size());
+    CHECK_EQ(in0.size(), out.size());
+
+    for (size_t i = 0; i < in0.size(); i++) {
+      out_data[i] = in0_data[i] * in1_data[i];
+    }
+  }
+
+  static void Mul(Vec<T> in0, T scale, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), out.size());
+
+    for (size_t i = 0; i < in0.size(); i++) {
+      out_data[i] = in0_data[i] * scale;
+    }
+  }
+
+  static void Add(Vec<T> in0, Vec<T> in1, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *in1_data = in1.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), in1.size());
+    CHECK_EQ(in0.size(), out.size());
+
+    for (size_t i = 0; i < in0.size(); i++) {
+      out_data[i] = in0_data[i] + in1_data[i];
+    }
+  }
+
+  static void Add(Vec<T> in0, T bias, Vec<T> out) {
+    auto *in0_data = in0.data();
+    auto *out_data = out.data();
+
+    CHECK_EQ(in0.size(), out.size());
+
+    for (int i = 0; i < in0.size(); in0++) {
+      out_data[i] = in0_data[i] + bias;
+    }
+  }
+
  protected:
   void RandInit(float offset = 0.5) {
     for (size_t i = 0; i < size(); i++) data_[i] = (rand() / (float)RAND_MAX - 0.5) / size_;
   }
 
-  void Reset(size_t size) {
-    CHECK_GT(size_, 0);
-    if (size_ == size) return;
-    if (data_ != NULL) {
-      delete data_;
-      size_ = 0;
-    }
-    size_ = size;
-    data_ = new value_type[size_];
-  }
-
  private:
-  // std::unique_ptr<value_type[]> _data;
   value_type *data_{};
   size_t size_{0};
 };  // class Vec
@@ -250,5 +258,4 @@ Vec<T> sqrt(const Vec<T> &vec) {
   return std::move(tmp);
 }
 
-}  // namespace ps
 }  // namespace tips

@@ -56,13 +56,15 @@ struct alignas(64) SparseTableShard {
     RwLockReadGuard lock(rwlock_);
     auto it = data().find(key);
     if (it == data().end()) return false;
-    val = it->second;
+    val.ShadowCopyFrom(it->second);
     return true;
   }
 
   void Assign(const key_t &key, const value_t &val) {
+    LOG(INFO) << "assign val: " << val;
     RwLockWriteGuard lock(rwlock_);
-    data()[key] = val;
+    data()[key].CopyFrom(val);
+    LOG(INFO) << "after assign: " << data()[key];
   }
 
   size_t size() const {
@@ -115,7 +117,7 @@ class SparseTable : public Table {
   using param_t = value_t;
   typedef SparseTableShard<key_t, value_t> shard_t;
 
-  SparseTable() { local_shards_.resize(local_shard_num()); }
+  SparseTable(const MpiGroup &server_group) : Table(server_group) { local_shards_.resize(local_shard_num()); }
 
   shard_t &local_shard(int shard_id) {
     CHECK_LT(shard_id, local_shard_num());
@@ -140,17 +142,6 @@ class SparseTable : public Table {
   }
 
   /**
-   * output parameters to ostream
-   */
-  std::string __str__() {
-    std::stringstream ss;
-    for (int i = 0; i < shard_num(); i++) {
-      ss << local_shard(i);
-    }
-    return ss.str();
-  }
-
-  /**
    * output to a local file
    */
   void WriteToFile(const std::string &path) {
@@ -168,12 +159,31 @@ class SparseTable : public Table {
     }
     return res;
   }
+
   // TODO assign protected
   int ToShardId(const key_t &key) { return ToHashValue(key) % shard_num(); }
+  int ToServerId(const key_t &key) const { return ToHashValue(key) % server_group().mpi_size(); }
+
+  static int ToShardId(const key_t &key, int num_shard) { return ToHashValue(key) % num_shard; }
+
+  /**
+   * output parameters to ostream
+   */
+  std::string __str__() const;
 
  private:
   absl::InlinedVector<shard_t, 4> local_shards_;
-};  // class SparseTable
+};
+
+template <typename Key, typename Value>
+std::string SparseTable<Key, Value>::__str__() const {
+  std::stringstream ss;
+  for (int i = 0; i < shard_num(); i++) {
+    ss << local_shard(i);
+  }
+  return ss.str();
+}
+// class SparseTable
 
 }  // namespace ps
 }  // namespace tips

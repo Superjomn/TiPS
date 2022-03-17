@@ -17,12 +17,16 @@ table MessageMeta {
 table PullRequest {
   meta: MessageMeta;
   keys: [uint64];
+  dtypes: [DataType];   // provide dtype if record need to be initialized
+  lengths: [uint32];    // provide length if record need to be initialized
 }
 
 table KeyItem {
   key: uint64;
-  value: [char];
+  dtype: DataType;
+  value: [uint8];
 }
+
 table PullResponse {
   meta: MessageMeta;
   data: [KeyItem];

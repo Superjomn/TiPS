@@ -16,6 +16,12 @@ RpcService *RpcServer::AddService(const std::string &type, RpcCallback callback)
   return new_service;
 }
 
+RpcService *RpcServer::TryAddService(const std::string &type, RpcCallback callback) {
+  auto *service = LookupService(type);
+  if (service) return service;
+  return AddService(type, std::move(callback));
+}
+
 void RpcServer::StartRunLoop() {
   while (true) {
     ZmqMessage msg;
@@ -168,21 +174,26 @@ void RpcServer::Finalize() {
     }
   }
 
-  MPI_LOG << "all threads quit";
+  MPI_LOG << "all rpc listen threads quit";
 
   for (int i = 0; i < mpi_size(); i++) {
     ZCHECK(zmq_close(senders_[i]));
   }
 
+  MPI_LOG << "closing zmq sockets";
   ZCHECK(zmq_close(receiver_));
   ZCHECK(zmq_ctx_destroy(zmq_ctx_));
 
   mpi_barrier();
 
+  MPI_LOG << "deleting services";
+
   for (auto &item : services_) {
     delete item.second;
     item.second = nullptr;
   }
+
+  MPI_LOG << "RPC quit";
 
   mpi_barrier();
 }
@@ -220,7 +231,6 @@ void RpcServer::Initialize() {
     CHECK_EQ(MPI_Allgather(MPI_IN_PLACE, 0, MPI_INT, &ports[0], 1, MPI_INT, mpi_comm()), 0);
 
     for (int i = 0; i < mpi_size(); i++) {
-      MPI_LOG << "ip " << i << " " << MpiContext::Global().ip(i);
       CHECK_EQ(ignore_signal_call(zmq_connect,
                                   senders_[i],
                                   StringFormat("tcp://%s:%d", MpiContext::Global().ip(i).c_str(), ports[i]).c_str()),
@@ -272,12 +282,6 @@ RpcService::RpcService(RpcCallback callback) : callback_(std::move(callback)) {
   CHECK_EQ(sizeof(void *), sizeof(long long));
   MPI_Allgather(&my_ptr, 1, MPI_LONG_LONG, &remote_service_ptrs_[0], 1, MPI_LONG_LONG, mpi_comm());
   mpi_barrier();
-
-  if (mpi_rank() == 0) {
-    for (int i = 0; i < mpi_size(); i++) {
-      MPI_LOG << i << "-service: " << remote_service_ptrs_[i];
-    }
-  }
 }
 
 RpcService *RpcService::remote_service(size_t rank) {

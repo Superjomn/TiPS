@@ -23,26 +23,48 @@ class MpiGroup {
 
   void AddRanks(absl::Span<int>&& ranks);
 
+  template <typename Iterator>
+  void AddRanks(Iterator begin, Iterator end) {
+    for (auto it = begin; it != end; it++) {
+      AddRank(*it);
+    }
+  }
+
   void Initialize();
 
+  void Finalize() {
+    if (valid()) {
+      MPI_Comm_free(&mpi_comm_);
+      mpi_comm_ = MPI_COMM_NULL;
+    }
+
+    if (world_group_ != MPI_GROUP_NULL) MPI_Group_free(&world_group_);
+    if (my_group_ != MPI_GROUP_NULL) MPI_Group_free(&my_group_);
+
+    world_group_ = MPI_GROUP_NULL;
+    my_group_    = MPI_GROUP_NULL;
+  }
+
   bool valid() const { return initialized_ && mpi_comm_ != MPI_COMM_NULL; }
+
+  bool empty() const {
+    CHECK(initialized_);
+    return rank_order_.empty();
+  }
 
   MPI_Comm mpi_comm() const {
     CHECK(valid());
     return mpi_comm_;
   }
 
-  int mpi_size() const {
-    CHECK(valid());
-    return mpi_size_;
-  }
+  int mpi_size() const { return data_.size(); }
 
   int mpi_rank() const {
     CHECK(valid());
     return mpi_rank_;
   }
 
-  void Barrier() const { ZCHECK(MPI_Barrier(mpi_comm())); }
+  void Barrier() const { ::tips::mpi_barrier(this->mpi_comm()); }
 
   void AllReduce(void* sendbuf, void* recvbuf, int count, MPI_Datatype datatype, MPI_Op op);
 
@@ -58,14 +80,7 @@ class MpiGroup {
 
   int ToWorldRank() const { return ToWorldRank(this->mpi_rank()); }
 
-  ~MpiGroup() {
-    if (valid()) {
-      MPI_Comm_free(&mpi_comm_);
-    }
-
-    if (world_group_ != MPI_GROUP_NULL) MPI_Group_free(&world_group_);
-    if (my_group_ != MPI_GROUP_EMPTY) MPI_Group_free(&my_group_);
-  }
+  ~MpiGroup() { Finalize(); }
 
  private:
   bool initialized_{};

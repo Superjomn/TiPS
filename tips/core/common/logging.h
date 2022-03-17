@@ -76,7 +76,7 @@ void gen_log(std::ostream& log_stream_,
              const char* func,
              int lineno,
              const char* level,
-             const int kMaxLen = 40);
+             const int kMaxLen = 20);
 
 // LogMessage
 class LogMessage {

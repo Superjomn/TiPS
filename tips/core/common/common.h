@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "tips/core/common/datatype.h"
 #include "tips/core/common/logging.h"
 #include "tips/core/common/macro.h"
 

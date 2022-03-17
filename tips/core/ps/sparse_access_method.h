@@ -20,13 +20,17 @@ class SparseTablePullAccess : public PullAccessMethod<KEY, PARAM, VALUE> {
   /**
    * @brief assign an initial value to param
    */
-  void InitParam(const key_t &key, param_t &param) override { param = param_t(); }
+  void InitParam(const key_t &key, param_t &param, Datatype dtype, int length) override {
+    param_t x(dtype, length);  // move
+    param = std::move(x);
+    memset(param.buffer(), 0, param.num_bytes());
+  }
 
   /**
    * @brief assign param to val
    * TODO(Superjomn) Consider zero-copy way.
    */
-  void GetPullValue(const key_t &key, const param_t &param, pull_val_t &val) override { val = param; }
+  void GetPullValue(const key_t &key, const param_t &param, pull_val_t &val) override { val.ShadowCopyFrom(param); }
 
   void ApplyPullValue(const key_t &key, param_t &param, const pull_val_t &val) override { param = val; }
 
@@ -44,7 +48,12 @@ class SparseTableSgdPushAccess : public PushAccessMethod<KEY, PARAM, GRAD> {
 
   explicit SparseTableSgdPushAccess(table_t *table, float lr) : table_(table), lr_(lr) {}
 
-  void ApplyPushValue(const key_t &key, param_t &param, const grad_t &grad) override { param += grad * lr_; }
+  void ApplyPushValue(const key_t &key, param_t &param, const grad_t &grad) override {
+    param_t temp(param.dtype(), param.size());
+    param_t::Mul(grad.ShadowCopy(), lr_, temp.ShadowCopy());
+    param = std::move(temp);
+    LOG(INFO) << "Updated " << key << " " << param;
+  }
 
  private:
   table_t *table_;
