@@ -1,3 +1,4 @@
+#pragma once
 #include <atomic>
 #include <functional>
 #include <vector>
@@ -25,6 +26,15 @@ class ThreadPool {
     Start(std::move(task));
     Join();
   }
+
+  void Stop() {
+    for (auto& t : threads_) {
+      t.Terminate();
+    }
+  }
+
+  size_t size() const { return threads_.size(); }
+  size_t parallel_num() const { return parallel_num_; }
 
  protected:
   bool Joinable() const { return static_cast<bool>(task_); }

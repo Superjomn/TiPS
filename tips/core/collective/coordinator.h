@@ -14,6 +14,8 @@
 
 /**
  * The basic idea of the coordinator-based allreduce way is borrowed from Baidu-ring-reduce and Horovod.
+ * The coordinator is a unique node in the ring system that helps to schedule the actual REDUCE operation across all the
+ * nodes.
  */
 
 namespace tips {
@@ -21,6 +23,7 @@ namespace collective {
 
 using CommunicationDoneCallback = std::function<void(StatusOr<tensorflow::Tensor>)>;
 
+// We use the Flatbuffers to optimize IO with the continuous in-memory data structures.
 using RequestMessage  = FBS_TypeBufferOwned<message::RequestMessage>;
 using ResponseMessage = FBS_TypeBufferOwned<message::ResponseMessage>;
 
@@ -121,7 +124,7 @@ ResponseMessage ConstructResponseMessage(MessageTable& table, const std::string&
 TIPS_MUST_USE_RESULT
 Status PerformCollectiveOp(OpRecord* op_record,
                            message::ResponseType response_type,
-                           const std::string name,
+                           const std::string& name,
                            const std::string& error_msg);
 
 // This function adds the op's record into the local op queue and sends a message to the coordinator indicating that
@@ -131,7 +134,7 @@ void EnqueueTensorCollective(const OpRecord& record, message::RequestType reques
 inline bool IsCoordinator() { return mpi_rank() == 0; }
 
 /**
- * The background thread logic.
+ * The background thread that helps handles the collective requests sent from the working threads(tf tasks).
  * NOTE this function should be triggered after MPI and RPC is initialized.
  */
 void BackgroundThreadLoop();

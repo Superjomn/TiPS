@@ -1,5 +1,6 @@
 #pragma once
 
+#include <absl/container/inlined_vector.h>
 #include <absl/types/span.h>
 
 #include "tips/core/common/common.h"
@@ -14,12 +15,7 @@ struct alignas(64) DenseTableShard {
 
   absl::Span<T> data() { return absl::Span<T>(data_.data(), data_.size()); }
   absl::Span<const T> data() const { return absl::Span<T>(data_.data(), data_.size()); }
-  void SetData(absl::Span<const T> d) {
-    data_.resize(d.size());
-    for (int i = 0; i < d.size(); i++) {
-      data_[i] = d[i];
-    }
-  }
+  void SetData(absl::Span<const T> d) { data_.assign(d.begin(), d.end()); }
   void SetData(std::vector<T>&& d) { data_ = std::move(d); }
 
   record_type* Lookup(size_t offset) {
@@ -53,14 +49,21 @@ class DenseTable : public Table {
   using record_type = T;
   using shard_type  = DenseTableShard<T>;
 
-  DenseTable() {
-    local_shards_.reset(new shard_type[local_shard_num()]);
-    mpi_barrier();
+  DenseTable(int num_nodes, int num_local_shards) : Table(num_nodes, num_local_shards) {
+    local_shards_.reset(new std::vector<shard_type>(num_local_shards));
+    LOG(INFO) << "Num shards: " << shard_num();
   }
-  ~DenseTable() { mpi_barrier(); }
 
-  shard_type& local_shard(int i) { return local_shards_[i]; }
-  const shard_type& local_shard(int i) const { return local_shards_[i]; }
+  ~DenseTable() = default;
+
+  shard_type& local_shard(int i) {
+    CHECK_LT(i, local_shards_->size());
+    return (*local_shards_)[i];
+  }
+  const shard_type& local_shard(int i) const {
+    CHECK_LT(i, local_shards_->size());
+    return local_shards_[i];
+  }
 
   shard_type& shard(int i) { return local_shard(shard_info(i).local_shard_id); }
   const shard_type& shard(int i) const { return local_shard(shard_info(i).local_shard_id); }
@@ -82,7 +85,6 @@ class DenseTable : public Table {
   }
 
   void Resize(size_t size) {
-    mpi_barrier();
     size_ = size;
     boundaries_.resize(shard_num() + 1);
 
@@ -94,16 +96,12 @@ class DenseTable : public Table {
     for (int i = 0; i < local_shard_num(); i++) {
       int shard_id = local_shard_info(i).shard_id;
       std::vector<T> new_data(boundaries_[shard_id + 1] - boundaries_[shard_id]);
-      local_shards_[i].SetData(new_data);
+      local_shard(i).SetData(new_data);
     }
-
-    mpi_barrier();
   }
 
   template <typename Func>
   void ForEach(Func&& func) {
-    mpi_barrier();
-
     for (int i = 0; i < local_shard_num(); i++) {
       record_type* data = &local_shard(i).data()[0];
       int shard_id      = local_shard(i).shard_id;
@@ -117,15 +115,13 @@ class DenseTable : public Table {
         }
       });
     }
-
-    mpi_barrier();
   }
 
   void Load(const std::string& path);
   void Save(const std::string& path) const;
 
  private:
-  std::unique_ptr<shard_type[]> local_shards_;
+  absl::InlinedVector<shard_type, 8> local_shards_;
   std::vector<size_t> boundaries_;
   size_t size_{};
 };

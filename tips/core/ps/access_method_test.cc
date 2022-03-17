@@ -11,12 +11,12 @@ namespace ps {
 TEST(SparseAccess, begin) { tips_init(); }
 
 TEST(SparseAccess, pull) {
-  SparseTable<size_t /*key*/, float /*param*/> table;
+  SparseTable<size_t /*key*/, float /*param*/> table(10, 20);
   table.Assign(1, 1.f);
 
   SparseTablePullAccess<size_t, float, float> pull_access(&table);
 
-  auto pull = MakePullAccess(table, pull_access);
+  auto pull = MakePullAccess(&table, pull_access);
 
   float x;
   pull->GetPullValue(1, x);
@@ -27,16 +27,16 @@ TEST(SparseAccess, pull) {
 }
 
 TEST(SparseAccess, sgd_push) {
-  SparseTable<size_t /*key*/, float /*param*/> table;
+  SparseTable<size_t /*key*/, float /*param*/> table(10, 20);
   table.Assign(1, 1.f);
 
   SparseTableSgdPushAccess<size_t, float, float> push_access(&table, 0.01f);
   SparseTablePullAccess<size_t, float, float> pull_access(&table);
 
-  auto push = MakePushAccess(table, push_access);
+  auto push = MakePushAccess(&table, push_access);
   push->ApplyPushValue(1, 1.f);
 
-  auto pull = MakePullAccess(table, pull_access);
+  auto pull = MakePullAccess(&table, pull_access);
   float x;
   pull->GetPullValue(1, x);
   LOG(INFO) << x;

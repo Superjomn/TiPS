@@ -7,11 +7,7 @@ void Table::Initialize() {
   mpi_barrier();
   CHECK(!Initialized()) << "Duplicate initializing Table found";
   CHECK_GT(mpi_size(), 0);
-  set_local_shrard_num(TABLE_SHARD_NUM);
-  LOG(INFO) << "mpi_size: " << mpi_size();
-  LOG(INFO) << "local_shard_num: " << local_shard_num_;
 
-  shard_num_ = mpi_size() * local_shard_num_;
   shards_.resize(shard_num_);
   local_shards_.resize(local_shard_num_);
 
@@ -71,6 +67,11 @@ void Table::Finalize() {
   local_thread_group_.Join();
 
   mpi_barrier();
+}
+
+const Table::ShardInfo& Table::shard_info(int i) const {
+  CHECK_LT(i, shard_num());
+  return shards_[i];
 }
 
 }  // namespace ps

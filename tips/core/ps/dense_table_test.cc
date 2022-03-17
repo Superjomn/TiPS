@@ -11,7 +11,7 @@ TEST(DenseTable, basic) {
   tips_init();
 
   {
-    DenseTable<int32_t> table;
+    DenseTable<int32_t> table(4, 2);
     table.Initialize();
 
     table.Resize(100);

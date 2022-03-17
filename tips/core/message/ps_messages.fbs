@@ -8,21 +8,35 @@ enum DataType : short {
   TF_INT64 = 3,
 }
 
+enum MessageType : short {
+  PULL = 0,
+  PUSH = 1
+}
+
+enum OptimizeStrategyType: short {
+  SGD = 0,
+  AdaGrad = 1
+}
+
 table MessageMeta {
   client_id: int;
   message_id: int;
-}
-
-// RPC service: PullResponse pull_service(PullRequest)
-table PullRequest {
-  meta: MessageMeta;
-  keys: [uint64];
+  msg_type : MessageType;
 }
 
 table KeyItem {
   key: uint64;
-  value: [char];
+  value: [uint8];
 }
+
+// RPC service: PullResponse pull_service(PullRequest)
+table PullRequest {
+  // Indicate which table this request should go.
+  table_id: uint32;
+  meta: MessageMeta;
+  keys: [uint64];
+}
+
 table PullResponse {
   meta: MessageMeta;
   data: [KeyItem];
@@ -30,6 +44,8 @@ table PullResponse {
 
 // RPC service: PushResponse push_service(PushRequest)
 table PushRequest {
+  // Indicate which table this request should go.
+  table_id: uint32;
   meta: MessageMeta;
   data: [KeyItem];
 }

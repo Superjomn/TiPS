@@ -16,15 +16,9 @@
 import tensorflow as tf
 import tips.tensorflow.keras as tips
 import tips.tensorflow.keras.callbacks as tips_callbacks
+import sys
 
-# Horovod: initialize Horovod.
-
-# Horovod: pin GPU to be used to process local rank (one GPU per process)
-#gpus = tf.config.experimental.list_physical_devices('GPU')
-#for gpu in gpus:
-#tf.config.experimental.set_memory_growth(gpu, True)
-#if gpus:
-#tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], 'GPU')
+print('mpi_size', tips.size())
 
 (mnist_images, mnist_labels), _ = \
     tf.keras.datasets.mnist.load_data(path='mnist-%d.npz' % tips.rank())
@@ -62,37 +56,37 @@ mnist_model.compile(
     experimental_run_tf_function=False)
 
 callbacks = [
-    # Horovod: broadcast initial variable states from rank 0 to all other processes.
+    # Broadcast initial variable states from rank 0 to all other processes.
     # This is necessary to ensure consistent initialization of all workers when
     # training is started with random weights or restored from a checkpoint.
     tips_callbacks.BroadcastGlobalVariablesCallback(0),
 
-    # Horovod: average metrics among workers at the end of every epoch.
+    # Average metrics among workers at the end of every epoch.
     #
     # Note: This callback must be in the list before the ReduceLROnPlateau,
     # TensorBoard or other metrics-based callbacks.
     tips_callbacks.MetricAverageCallback(),
 
-    # Horovod: using `lr = 1.0 * hvd.size()` from the very beginning leads to worse final
+    # Using `lr = 1.0 * hvd.size()` from the very beginning leads to worse final
     # accuracy. Scale the learning rate `lr = 1.0` ---> `lr = 1.0 * hvd.size()` during
     # the first three epochs. See https://arxiv.org/abs/1706.02677 for details.
     tips_callbacks.LearningRateWarmupCallback(
         initial_lr=scaled_lr, warmup_epochs=3, verbose=1),
 ]
 
-# Horovod: save checkpoints only on worker 0 to prevent other workers from corrupting them.
+# Save checkpoints only on worker 0 to prevent other workers from corrupting them.
 if tips.rank() == 0:
     callbacks.append(
         tf.keras.callbacks.ModelCheckpoint('./checkpoint-{epoch}.h5'))
 
-# Horovod: write logs on worker 0.
+# Write logs on worker 0.
 verbose = 1 if tips.rank() == 0 else 0
 
 # Train the model.
-# Horovod: adjust number of steps based on number of GPUs.
+# Adjust number of steps based on number of GPUs.
 mnist_model.fit(
     dataset,
     steps_per_epoch=500 // tips.size(),
     callbacks=callbacks,
-    epochs=24,
+    epochs=4,
     verbose=verbose)

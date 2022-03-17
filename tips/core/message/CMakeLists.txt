@@ -2,6 +2,7 @@ set(fbs_flags "--no-includes;--gen-compare;--force-empty")
 
 compile_flatbuffers_schema_to_cpp_opt(test0_fbs_header test0.fbs "${fbs_flags}")
 compile_flatbuffers_schema_to_cpp_opt(collective_messages collective_messages.fbs "${fbs_flags}")
+compile_flatbuffers_schema_to_cpp_opt(ps_messages ps_messages.fbs "${fbs_flags}")
 
 add_custom_target(fbs_headers ALL
         DEPENDS test0_fbs_header flatbuffers collective_messages)

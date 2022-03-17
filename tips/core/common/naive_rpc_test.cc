@@ -6,6 +6,7 @@
 #include <thread>
 
 #include "tips/core/collective/utils.h"
+#include "tips/core/common/flatbuffers_utils.h"
 #include "tips/core/message/test0_generated.h"
 
 namespace tips {
@@ -31,7 +32,7 @@ void TestRpc(RpcServer& server) {
       response_head.service   = head->service;
       response_head.request   = head->request;
 
-      auto msg = flatbuffers::GetRoot<MessageRequest>(buffer);
+      auto msg = GetFbsData<MessageRequest>(buffer);
 
       int v             = msg->v();
       std::string greet = msg->greet()->str();

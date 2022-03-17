@@ -10,6 +10,9 @@
 
 namespace tips {
 
+/**
+ * Channel is a thread-safe producer-consumer queue.
+ */
 template <typename T>
 class Channel {
  public:
@@ -151,6 +154,9 @@ class Channel {
   std::condition_variable full_cond_;
 };
 
+/**
+ * Create a Channel that is sharable.
+ */
 template <typename T>
 std::shared_ptr<Channel<T>> MakeChannel(size_t capacity = std::numeric_limits<size_t>::max()) {
   return std::make_shared<Channel<T>>(capacity);

@@ -31,13 +31,19 @@ enum class RpcMsgType : uint8_t {
 #undef __
 };
 
+//! Holds more information.
+enum class MsgMetaType : uint16_t {
+  PS_PULL = 0,  // 00
+  PS_PUSH = 1,  // 01
+};
+using msg_meta_t = uint16_t;
+
 const char* GetRpcMsgTypeRepr(RpcMsgType type);
 
 std::ostream& operator<<(std::ostream& os, RpcMsgType type);
 
 struct RpcMsgHead {
-  bool initialized() const { return service; }
-
+  // fields:
   RpcService* service{};
   RpcRequest* request{};
 
@@ -45,6 +51,18 @@ struct RpcMsgHead {
   int server_id{-1};
 
   RpcMsgType message_type;
+
+  msg_meta_t meta_info{};
+
+  bool initialized() const { return service; }
+
+  bool is_request() const { return message_type == RpcMsgType::REQUEST; }
+  bool is_response() const { return message_type == RpcMsgType::RESPONSE; }
+
+  void set_as_ps_pull() { meta_info |= static_cast<uint16_t>(MsgMetaType::PS_PULL); }
+  void set_as_ps_push() { meta_info |= static_cast<uint16_t>(MsgMetaType::PS_PUSH); }
+  bool is_ps_pull() const { return meta_info & static_cast<uint16_t>(MsgMetaType::PS_PULL); }
+  bool is_ps_push() const { return meta_info & static_cast<uint16_t>(MsgMetaType::PS_PUSH); }
 };
 
 using RpcCallback = std::function<void(ZmqMessage&&)>;
