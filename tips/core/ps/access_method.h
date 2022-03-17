@@ -86,7 +86,7 @@ class ServerPullAccessAgent {
    */
   void GetPullValue(const key_t &key, pull_val_t &val) {
     pull_param_t param;
-    if (!table_->Find(key, param)) {
+    if (!table_->Get(key, param)) {
       access_method_.InitParam(key, param);
       table_->Assign(key, param);
     }
@@ -133,7 +133,7 @@ class ServerPushAccessAgent {
   void ApplyPushValue(const key_t &key, const push_val_t &push_val) {
     push_param_t *param = nullptr;
     // TODO improve this in fix mode?
-    CHECK(table_->Find(key, param)) << "new key should be inited before:\t" << key;
+    CHECK(table_->Get(key, param)) << "new key should be inited before:\t" << key;
     CHECK(param);
     access_method_.ApplyPushValue(key, *param, push_val);
   }

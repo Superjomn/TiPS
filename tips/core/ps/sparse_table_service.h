@@ -14,6 +14,7 @@
 #include "tips/core/common/flatbuffers_utils.h"
 #include "tips/core/common/rwlock.h"
 #include "tips/core/message/ps_messages_generated.h"
+#include "tips/core/ps/sparse_table.h"
 #include "tips/core/ps/table.h"
 
 namespace tips {
@@ -44,16 +45,24 @@ class SparseTableService : public SparseTable {
   }
 
   void Pull(const ps::message::PullRequest &msg, pull_done_handle_t handle) {
-    auto shard_keys = std::make_shared<absl::InlinedVector<std::vector<uint64_t>, 4>>();
-    shard_keys->resize(shard_num());
+    auto all_shard_keys = std::make_shared<absl::InlinedVector<std::vector<uint64_t>, 4>>();
+    all_shard_keys->resize(shard_num());
 
     for (const auto &key : *msg.keys()) {
       const auto shard_id = ToShardId(key);
-      (*shard_keys)[shard_id].push_back(key);
+      (*all_shard_keys)[shard_id].push_back(key);
     }
 
     for (int shard_id = 0; shard_id < shard_num(); ++shard_id) {
-      server_channel(shard_id).Write([shard_keys] {});
+      // The shard_keys is shared here.
+      server_channel(shard_id).Write([this, all_shard_keys, shard_id] {
+        // Here we need a agent to access the shard?
+        auto &cur_shard_keys = (*all_shard_keys)[shard_id];
+        for (auto key : cur_shard_keys) {
+          float *val;
+          local_shard(shard_id).Get(key, val);
+        }
+      });
     }
   }
 

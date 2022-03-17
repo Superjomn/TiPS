@@ -45,11 +45,13 @@ struct alignas(64) SparseTableShard {
   using key_t   = uint64_t;
   using value_t = sparse_value_t;
   using map_t   = absl::flat_hash_map<key_t, value_t>;
+  template <typename Value>
+  using value_initializer = std::function<Value()>;
 
   SparseTableShard() = default;
 
   template <typename Value>
-  bool Find(const key_t &key, Value *&val) {
+  bool Get(const key_t &key, Value *&val) {
     RwLockReadGuard lock(rwlock_);
     auto it = data().find(key);
     if (it == data().end()) return false;
@@ -58,12 +60,25 @@ struct alignas(64) SparseTableShard {
   }
 
   template <typename Value>
-  bool Find(const key_t &key, Value &val) {
+  bool Get(const key_t &key, Value &val) {
     RwLockReadGuard lock(rwlock_);
     auto it = data().find(key);
     if (it == data().end()) return false;
     val = absl::get<Value>(it->second);
     return true;
+  }
+
+  template <typename Value>
+  void GetOrCreate(const key_t &key, Value *&val, value_initializer<Value> initializer) {
+    {
+      RwLockReadGuard lock(rwlock_);
+      if (Get(key, val)) return;
+    }
+    {
+      RwLockWriteGuard lock(rwlock_);
+      data_[key] = initializer();
+      val        = &data_[key];
+    }
   }
 
   template <typename Value>
@@ -140,13 +155,13 @@ class SparseTable : public Table {
   template <typename Value>
   bool Find(const key_t &key, Value *&val) {
     int local_shard_id = ToHashValue(key) % local_shard_num();
-    return local_shard(local_shard_id).Find(key, val);
+    return local_shard(local_shard_id).Get(key, val);
   }
 
   template <typename Value>
   bool Find(const key_t &key, Value &val) {
     int local_shard_id = ToHashValue(key) % local_shard_num();
-    return local_shard(local_shard_id).Find(key, val);
+    return local_shard(local_shard_id).Get(key, val);
   }
 
   void Assign(const key_t &key, const value_t &val) {
