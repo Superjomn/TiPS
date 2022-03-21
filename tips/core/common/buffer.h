@@ -9,20 +9,20 @@ namespace tips {
 /**
  * A vector container that holds any data type.
  */
-class AnyVec {
+class Buffer {
  public:
   using byte_t = uint8_t;
-  AnyVec()     = default;
+  Buffer()     = default;
 
   //! Construct, own the memory.
-  AnyVec(Datatype dtype, int num_elements)
+  Buffer(Datatype dtype, int num_elements)
       : dtype_(dtype),
         data_(new uint8_t[num_elements * DatatypeNumBytes(dtype)]),
         num_elements_(num_elements),
         own_data_(true) {}
 
   //! Construct, move the resource if owned by the other.
-  AnyVec(AnyVec&& other)
+  Buffer(Buffer&& other)
       : dtype_(other.dtype_), num_elements_(other.num_elements_), own_data_(other.own_data_), data_(other.data_) {
     other.own_data_     = false;
     other.num_elements_ = 0;
@@ -30,20 +30,20 @@ class AnyVec {
   }
 
   //! Construct from a buffer, without own the buffer.
-  AnyVec(Datatype dtype, int num_elements, void* buf)
+  Buffer(Datatype dtype, int num_elements, void* buf)
       : dtype_(dtype), num_elements_(num_elements), data_(static_cast<byte_t*>(buf)), own_data_{false} {}
 
-  AnyVec(const AnyVec&) = delete;
+  Buffer(const Buffer&) = delete;
 
-  ~AnyVec() {
+  ~Buffer() {
     if (data_ && own_data_) {
       delete data_;
     }
   }
 
   //! Copy the data, without allocating memory.
-  AnyVec ShadowCopy() const {
-    AnyVec res;
+  Buffer ShadowCopy() const {
+    Buffer res;
     res.data_         = data_;
     res.num_elements_ = num_elements_;
     res.dtype_        = dtype_;
@@ -52,13 +52,13 @@ class AnyVec {
   }
 
   //! Copy the data, allocate memory.
-  AnyVec Copy() const {
-    AnyVec res(dtype_, num_elements_);  // Allocate memory
+  Buffer Copy() const {
+    Buffer res(dtype_, num_elements_);  // Allocate memory
     memcpy(res.data_, data_, num_bytes());
     return res;
   }
 
-  AnyVec& operator=(AnyVec&& other) {
+  Buffer& operator=(Buffer&& other) {
     Clear();
 
     dtype_        = other.dtype_;
@@ -72,18 +72,18 @@ class AnyVec {
     return *this;
   }
 
-  AnyVec& operator=(const AnyVec& other) {
+  Buffer& operator=(const Buffer& other) {
     Clear();
 
     *this = std::move(other.ShadowCopy());
   }
 
-  void CopyFrom(const AnyVec& other) {
+  void CopyFrom(const Buffer& other) {
     Clear();
     *this = std::move(other.Copy());
   }
 
-  void ShadowCopyFrom(const AnyVec& other) {
+  void ShadowCopyFrom(const Buffer& other) {
     Clear();
     *this = std::move(other.ShadowCopy());
   }
@@ -110,7 +110,7 @@ class AnyVec {
 
   Datatype dtype() const { return dtype_; }
 
-  static void Mul(AnyVec a, AnyVec b, AnyVec out) {
+  static void Mul(Buffer a, Buffer b, Buffer out) {
     CHECK_EQ(a.dtype(), b.dtype());
     CHECK_EQ(a.dtype(), out.dtype());
     switch (a.dtype_) {
@@ -128,7 +128,7 @@ class AnyVec {
     }
   }
 
-  static void Mul(AnyVec a, float b, AnyVec out) {
+  static void Mul(Buffer a, float b, Buffer out) {
     CHECK_EQ(a.dtype(), out.dtype());
     switch (a.dtype_) {
 #define ___(dtype_repr, dtype)                        \
@@ -163,7 +163,7 @@ class AnyVec {
 
   size_t num_bytes() const { return num_elements_ * DatatypeNumBytes(dtype_); }
 
-  friend std::ostream& operator<<(std::ostream& os, const AnyVec& other) {
+  friend std::ostream& operator<<(std::ostream& os, const Buffer& other) {
     switch (other.dtype()) {
 #define ___(repr, dtype)                \
   case Datatype::repr:                  \

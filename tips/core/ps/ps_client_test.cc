@@ -14,9 +14,9 @@ void TestBasic() {
   req.data.emplace_back(3, DatatypeTypetrait<float>(), 4);
   req.data.emplace_back(200, DatatypeTypetrait<float>(), 13);
 
-  using val_t         = AnyVec;
+  using val_t         = Buffer;
   using key_t         = uint64_t;
-  using param_t       = AnyVec;
+  using param_t       = Buffer;
   using table_t       = SparseTable<key_t, val_t>;
   using pull_access_t = SparseTablePullAccess<key_t, param_t, val_t>;
   using push_access_t = SparseTableSgdPushAccess<key_t, param_t, param_t>;

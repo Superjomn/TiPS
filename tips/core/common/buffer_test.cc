@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 
-#include "tips/core/common/any_vec.h"
+#include "tips/core/common/buffer.h"
 
 namespace tips {
 
 template <typename T>
 void TestType() {
-  AnyVec vec(DatatypeTypetrait<T>(), 20);
+  Buffer vec(DatatypeTypetrait<T>(), 20);
   ASSERT_EQ(vec.size(), 20);
   ASSERT_EQ(vec.num_bytes(), 20 * sizeof(T));
 
@@ -15,7 +15,7 @@ void TestType() {
     data[i] = i;
   }
 
-  AnyVec out(vec.dtype(), vec.size());
+  Buffer out(vec.dtype(), vec.size());
 
   Vec<T> vec1 = vec.ToVec<T>();
   auto out1   = out.ToVec<T>();

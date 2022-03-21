@@ -24,7 +24,7 @@ class Route {
   // Extend this to hold more node kind.
   enum class NodeKind : short {
     PS_WORKER = 0,
-    PS_SERVER = 1,
+    PS_SERVER,
     __NUM__  // this should be placed in the last
   };
 

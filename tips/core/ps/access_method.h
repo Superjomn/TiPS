@@ -70,7 +70,7 @@ class PullAccessAgent {
   using pull_val_t      = typename AccessMethod::pull_val_t;
   using pull_param_t    = typename AccessMethod::param_t;
 
-  explicit PullAccessAgent() {}
+  explicit PullAccessAgent() = default;
   PullAccessAgent(table_t *table, access_method_t &&access_method)
       : table_(table), access_method_(std::move(access_method)) {}
 
@@ -148,12 +148,6 @@ class PushAccessAgent {
   table_t *table_{};
   AccessMethod access_method_;
 };  // class PushAccessAgent
-
-template <class Key, class Value>
-SparseTable<Key, Value> &global_sparse_table() {
-  static SparseTable<Key, Value> table;
-  return table;
-}
 
 template <typename Table, typename AccessMethod>
 auto MakePullAccess(Table &table, AccessMethod access_method) -> std::unique_ptr<PullAccessAgent<Table, AccessMethod>> {

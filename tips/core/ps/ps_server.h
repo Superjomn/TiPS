@@ -84,8 +84,8 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::AddRpcService() {
 
 namespace {
 
-// Holds the necessary datas while processing the task, we compose all the data in this structure for a single usage of
-// share pointer. We create a PullTaskSnapshot for each PullTask.
+// Holds the necessary data while processing the task, we compose all the data in this structure for a single usage of
+// share pointer, and a PullTaskSnapshot for each PullTask.
 template <typename key_t>
 struct PullTaskSnapshot {
   ZmqMessage zmq_msg;
@@ -193,13 +193,12 @@ void PsServer<TABLE, PULL_ACCESS_METHOD, PUSH_ACCESS_METHOD>::PullTask(ZmqMessag
 
 namespace {
 
-template <typename key_t>
 struct PushTaskSnapshot {
   ZmqMessage zmq_msg;
 
   std::mutex mu;
 
-  absl::flat_hash_map<key_t, std::vector<const message::KeyItem*>> slots;
+  absl::flat_hash_map<uint64_t, std::vector<const message::KeyItem*>> slots;
 
   const RpcMsgHead* msg_head() const { return GetMsgHead(zmq_msg); }
   const void* msg_buffer() const { return GetMsgContent(zmq_msg); }

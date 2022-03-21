@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "ps_utils.h"
-#include "tips/core/common/any_vec.h"
+#include "tips/core/common/buffer.h"
 #include "tips/core/common/vec.h"
 #include "tips/core/mpi/tips_mpi.h"
 #include "tips/core/operations.h"
@@ -31,7 +31,7 @@ flatbuffers::DetachedBuffer CreatePullRequest(const std::vector<uint64_t>& keys)
   return builder.Release();
 }
 
-flatbuffers::DetachedBuffer CreatePushRequest(const std::vector<uint64_t>& keys, const std::vector<AnyVec>& vecs) {
+flatbuffers::DetachedBuffer CreatePushRequest(const std::vector<uint64_t>& keys, const std::vector<Buffer>& vecs) {
   flatbuffers::FlatBufferBuilder builder;
 
   std::vector<flatbuffers::Offset<message::KeyItem>> datas;
@@ -53,9 +53,9 @@ flatbuffers::DetachedBuffer CreatePushRequest(const std::vector<uint64_t>& keys,
 }
 
 void TestBasic() {
-  using val_t         = AnyVec;
+  using val_t         = Buffer;
   using key_t         = uint64_t;
-  using param_t       = AnyVec;
+  using param_t       = Buffer;
   using table_t       = SparseTable<key_t, val_t>;
   using pull_access_t = SparseTablePullAccess<key_t, param_t, val_t>;
   using push_access_t = SparseTableSgdPushAccess<key_t, param_t, param_t>;
@@ -107,7 +107,7 @@ void TestBasic() {
     cv.wait(lock);
   }
 
-  std::vector<AnyVec> vecs;
+  std::vector<Buffer> vecs;
   vecs.emplace_back(DatatypeTypetrait<float>(), 10);
   vecs.emplace_back(DatatypeTypetrait<float>(), 10);
   for (int i = 0; i < 10; i++) vecs[0].mutable_data<float>()[i] = 1.f;

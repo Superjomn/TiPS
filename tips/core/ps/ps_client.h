@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tips/core/common/any_vec.h"
+#include "tips/core/common/buffer.h"
 #include "tips/core/common/common.h"
 #include "tips/core/common/naive_rpc.h"
 #include "tips/core/message/ps_messages_generated.h"
@@ -27,7 +27,7 @@ struct PullRequest {
 struct PushRequest {
   struct Record {
     uint64_t key;
-    AnyVec vec;
+    Buffer vec;
   };
   std::vector<Record> data;
 };
@@ -35,7 +35,7 @@ struct PushRequest {
 struct PullCache {
   ZmqMessage msg;  // Hold the original message to avoid copy Vec.
 
-  using Record = AnyVec;
+  using Record = Buffer;
   // NOTE TODO(Superjomn) The order remains the same with the original keys order in the pull request, so we do not need
   // a map here if the offset is recorded.
   std::unordered_map<uint64_t, Record> data;
@@ -98,7 +98,7 @@ bool PsClient<TABLE>::Pull(const PullRequest& req, PullCache* cache, callback_t 
           auto pull_response = flatbuffers::GetRoot<message::PullResponse>(GetMsgContent(cache->msg));
           for (auto* item : *pull_response->data()) {
             Datatype dtype = ToDatatype(item->dtype());
-            AnyVec vec(
+            Buffer vec(
                 dtype, item->value()->size() / DatatypeNumBytes(dtype), const_cast<uint8_t*>(item->value()->data()));
             cache->data[item->key()] = std::move(vec);
           }
