@@ -3,7 +3,8 @@
 namespace tips {
 
 void MpiGroup::Initialize() {
-  CHECK(!initialized_) << "Duplicate initialization found";
+  if (initialized_) return;
+
   CHECK(!data_.empty());
   initialized_ = true;
 

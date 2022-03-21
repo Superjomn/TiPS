@@ -121,7 +121,7 @@ struct alignas(64) SparseTableShard {
 
  private:
   map_t data_;
-  int shard_id_ = -1;
+  int shard_id_{-1};
   mutable RWLock rwlock_;
 };  // struct SparseTableShard
 
@@ -143,15 +143,9 @@ class SparseTable : public Table {
   }
 
   //! Get a local shard.
-  shard_t &local_shard(int shard_id) {
-    CHECK_LT(shard_id, local_shard_num());
-    return local_shards_[shard_id];
-  }
+  shard_t &local_shard(int shard_id);
 
-  const shard_t &local_shard(int shard_id) const {
-    CHECK_LT(shard_id, local_shard_num());
-    return local_shards_[shard_id];
-  }
+  const shard_t &local_shard(int shard_id) const;
 
   template <typename Value>
   bool Find(const key_t &key, Value *&val) {
@@ -196,7 +190,10 @@ class SparseTable : public Table {
   //! Get number of elements in this table.
   size_t size() const;
 
-  // TODO assign protected
+  //! Get some information about the data.
+  std::string Summary() const;
+
+ protected:
   int ToShardId(const key_t &key) { return ToHashValue(key) % shard_num(); }
 
  private:

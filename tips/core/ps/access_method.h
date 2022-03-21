@@ -12,10 +12,10 @@ namespace ps {
 /**
  * PullAccessMethod defines an Interface for pulling operation on a Table.
  */
-template <typename Key, typename Param, typename PullVal>
+template <typename Param, typename PullVal>
 class PullAccessMethod {
  public:
-  using key_t      = Key;
+  using key_t      = uint64_t;
   using param_t    = Param;
   using pull_val_t = PullVal;
 
@@ -38,12 +38,12 @@ class PullAccessMethod {
 /**
  * PullAccessMethod defines an Interface for pushing operation on a Table.
  */
-template <typename Key, typename Param, typename Grad>
+template <typename Param, typename Grad>
 class PushAccessMethod {
  public:
-  typedef Key key_t;
-  typedef Param param_t;
-  typedef Grad grad_t;
+  using key_t   = uint64_t;
+  using param_t = Param;
+  using grad_t  = Grad;
 
   /**
    * @brief update Server-side parameter with grad
@@ -125,7 +125,7 @@ class PushAccessAgent {
 
   using access_method_t = AccessMethod;
 
-  explicit PushAccessAgent() {}
+  explicit PushAccessAgent() = default;
   PushAccessAgent(table_t *table, access_method_t &&access) : table_(table), access_method_(std::move(access)) {}
 
   explicit PushAccessAgent(table_t &table, access_method_t &&access_method)

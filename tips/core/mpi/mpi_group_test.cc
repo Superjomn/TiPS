@@ -13,7 +13,7 @@ void MpiGroup_basic() {
   group.AddRank(2);
   group.Initialize();
 
-  if (group.valid()) {
+  if (group.IsMeContained()) {
     CHECK_EQ(mpi_rank(), group.ToWorldRank());
     LOG(INFO) << "my group rank: " << mpi_rank() << " -> " << group.mpi_rank();
   }

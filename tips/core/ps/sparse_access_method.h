@@ -7,15 +7,17 @@
 namespace tips {
 namespace ps {
 
-template <typename KEY, typename PARAM, typename VALUE>
-class SparseTablePullAccess : public PullAccessMethod<KEY, PARAM, VALUE> {
+template <typename PARAM, typename VALUE>
+class SparseTablePullAccess : public PullAccessMethod<PARAM, VALUE> {
  public:
-  using key_t      = KEY;
-  using param_t    = PARAM;
-  using pull_val_t = VALUE;
-  using table_t    = SparseTable<key_t, param_t>;
+  using key_t         = uint64_t;
+  using param_t       = PARAM;
+  using pull_val_t    = VALUE;
+  using table_t       = SparseTable;
+  using initializer_t = std::function<void(const SparseTable &, param_t *)>;
 
-  explicit SparseTablePullAccess(table_t *table) : table_{table} {}
+  explicit SparseTablePullAccess(table_t *table, initializer_t initializer)
+      : table_{table}, initializer_(initializer) {}
 
   /**
    * @brief assign an initial value to param
@@ -23,7 +25,7 @@ class SparseTablePullAccess : public PullAccessMethod<KEY, PARAM, VALUE> {
   void InitParam(const key_t &key, param_t &param, Datatype dtype, int length) override {
     param_t x(dtype, length);  // move
     param = std::move(x);
-    memset(param.buffer(), 0, param.num_bytes());
+    initializer_(*table_, param);
   }
 
   /**
@@ -36,28 +38,28 @@ class SparseTablePullAccess : public PullAccessMethod<KEY, PARAM, VALUE> {
 
  private:
   table_t *table_{};
+  initializer_t initializer_;
 };
 
-template <typename KEY, typename PARAM, typename GRAD>
-class SparseTableSgdPushAccess : public PushAccessMethod<KEY, PARAM, GRAD> {
+template <typename PARAM, typename GRAD>
+class SparseTableSgdPushAccess : public PushAccessMethod<PARAM, GRAD> {
  public:
-  using key_t   = KEY;
+  using key_t   = uint64_t;
   using param_t = PARAM;
   using grad_t  = GRAD;
-  using table_t = SparseTable<KEY, PARAM>;
+  using table_t = SparseTable;
 
-  explicit SparseTableSgdPushAccess(table_t *table, float lr) : table_(table), lr_(lr) {}
+  explicit SparseTableSgdPushAccess(table_t *table, float lr = 0.001) : table_(table), lr_(lr) {}
 
   void ApplyPushValue(const key_t &key, param_t &param, const grad_t &grad) override {
     param_t temp(param.dtype(), param.size());
     param_t::Mul(grad.ShadowCopy(), lr_, temp.ShadowCopy());
     param = std::move(temp);
-    LOG(INFO) << "Updated " << key << " " << param;
   }
 
  private:
-  table_t *table_;
-  float lr_{0.001};
+  table_t *table_{};
+  float lr_;
 };
 
 }  // namespace ps

@@ -33,7 +33,7 @@ class MpiGroup {
   void Initialize();
 
   void Finalize() {
-    if (valid()) {
+    if (IsMeContained()) {
       MPI_Comm_free(&mpi_comm_);
       mpi_comm_ = MPI_COMM_NULL;
     }
@@ -45,7 +45,8 @@ class MpiGroup {
     my_group_    = MPI_GROUP_NULL;
   }
 
-  bool valid() const { return initialized_ && mpi_comm_ != MPI_COMM_NULL; }
+  //! Returns valid only if this rank is contained in this group.
+  bool IsMeContained() const { return initialized_ && mpi_comm_ != MPI_COMM_NULL; }
 
   bool empty() const {
     CHECK(initialized_);
@@ -53,14 +54,14 @@ class MpiGroup {
   }
 
   MPI_Comm mpi_comm() const {
-    CHECK(valid());
+    CHECK(IsMeContained());
     return mpi_comm_;
   }
 
   int mpi_size() const { return data_.size(); }
 
   int mpi_rank() const {
-    CHECK(valid());
+    CHECK(IsMeContained());
     return mpi_rank_;
   }
 
