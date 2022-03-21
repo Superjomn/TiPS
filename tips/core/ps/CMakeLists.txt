@@ -4,7 +4,7 @@ core_gather_srcs(SRCS
         sparse_table.cc
         access_method.cc
         sparse_table_registry.cc
-        #route.cc
+        route.cc
         #dense_access_method.cc
         #param.cc
         #sparse_access_method.cc
@@ -24,3 +24,6 @@ cc_binary(test_ps_client SRCS ps_client_test.cc DEPS tipscore)
 mpi_test(test_ps_client 6)
 
 cc_test(test_sparse_table_registry SRCS sparse_table_registry_test.cc DEPS tipscore)
+
+cc_binary(test_ps_route SRCS route_test.cc DEPS tipscore)
+mpi_test(test_ps_route 4)
